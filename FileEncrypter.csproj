@@ -7,20 +7,19 @@
 		<ImplicitUsings>true</ImplicitUsings>
 		<RootNamespace>FileEncrypter</RootNamespace>
 		<AssemblyName>FileEncrypter</AssemblyName>
-		<AssemblyVersion>1.1.0.0</AssemblyVersion>
-		<InformationalVersion>1.1.0.0</InformationalVersion>
+		<AssemblyVersion>1.1.*</AssemblyVersion>
+		<InformationalVersion>1.1.0</InformationalVersion>
+		<Deterministic>false</Deterministic>
+		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 	</PropertyGroup>
 	<PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
-	  <DebugType>none</DebugType>
+		<DebugType>none</DebugType>
 	</PropertyGroup>
 	<ItemGroup>
-	  <PackageReference Include="JetBrains.Annotations" Version="2025.2.0" />
-	  <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.7" />
-	  <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.7" />
-	  <PackageReference Include="System.CommandLine" Version="2.0.0-beta6.25358.103" />
-	  <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="5.0.0" />
-	</ItemGroup>
-	<ItemGroup>
-	  <Folder Include="Properties\" />
+		<PackageReference Include="JetBrains.Annotations" Version="2025.2.0" />
+		<PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.7" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.7" />
+		<PackageReference Include="System.CommandLine" Version="2.0.0-beta6.25358.103" />
+		<PackageReference Include="System.Security.Cryptography.ProtectedData" Version="5.0.0" />
 	</ItemGroup>
 </Project>

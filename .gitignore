@@ -351,3 +351,6 @@ MigrationBackup/
 Test/
 
 .idea/.idea.FileEncrypter/.idea/
+
+*.ddargs.json
+*.cmdlineargs.json

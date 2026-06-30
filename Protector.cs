@@ -5,17 +5,18 @@ using Microsoft.Extensions.Logging;
 namespace FileEncrypter;
 
 [PublicAPI]
-public sealed class Protector(ILogger<Protector> logger) : IDisposable
+public sealed class Protector(ILogger<Protector> logger, in ProtectionOptions options) : IDisposable
 {
     private const string ENCRYPTED_EXTENSION = ".enc";
 
     private readonly CancellationTokenSource source = new();
 
     private ILogger Logger { get; } = logger;
+    private readonly ProtectionOptions options = options;
 
     public void Dispose() => this.source.Dispose();
 
-    public async Task<bool> ProtectAll(FileSystemInfo[] targets, ProtectionOptions options)
+    public async Task<bool> ProtectAll(FileSystemInfo[] targets)
     {
         bool success = true;
         foreach (FileSystemInfo target in targets)
@@ -23,13 +24,13 @@ public sealed class Protector(ILogger<Protector> logger) : IDisposable
             switch (target)
             {
                 case FileInfo file:
-                    this.source.CancelAfter(options.FileTimeout);
-                    success &= await ProtectFile(file, options, this.source.Token).ConfigureAwait(false);
+                    this.source.CancelAfter(this.options.FileTimeout);
+                    success &= await ProtectFile(file, this.source.Token).ConfigureAwait(false);
                     this.source.TryReset();
                     break;
 
                 case DirectoryInfo directory:
-                    success &= await ProtectDirectory(directory, options).ConfigureAwait(false);
+                    success &= await ProtectDirectory(directory).ConfigureAwait(false);
                     break;
 
                 default:
@@ -41,19 +42,19 @@ public sealed class Protector(ILogger<Protector> logger) : IDisposable
         return success;
     }
 
-    public async Task<bool> ProtectDirectory(DirectoryInfo directory, ProtectionOptions options)
+    public async Task<bool> ProtectDirectory(DirectoryInfo directory)
     {
         bool noErrors = true;
-        foreach (FileInfo file in directory.EnumerateFiles(options.SearchPattern, options.SearchOption))
+        foreach (FileInfo file in directory.EnumerateFiles(this.options.SearchPattern, this.options.SearchOption))
         {
-            this.source.CancelAfter(options.FileTimeout);
-            noErrors &= await ProtectFile(file, options, this.source.Token).ConfigureAwait(false);
+            this.source.CancelAfter(this.options.FileTimeout);
+            noErrors &= await ProtectFile(file, this.source.Token).ConfigureAwait(false);
             this.source.TryReset();
         }
         return noErrors;
     }
 
-    public async Task<bool> ProtectFile(FileInfo file, ProtectionOptions options, CancellationToken token)
+    public async Task<bool> ProtectFile(FileInfo file, CancellationToken token)
     {
         this.Logger.LogInformation("{Action} file {FileName}.", file.Extension is ENCRYPTED_EXTENSION ? "Decrypting" : "Encrypting", file.FullName);
 
@@ -75,8 +76,8 @@ public sealed class Protector(ILogger<Protector> logger) : IDisposable
             string finalPath;
             switch (file.Extension)
             {
-                case ENCRYPTED_EXTENSION when options.ValidModes.HasFlagFast(ProtectionModes.Decrypt):
-                    data      = ProtectedData.Unprotect(data, options.Password, DataProtectionScope.CurrentUser);
+                case ENCRYPTED_EXTENSION when this.options.ValidModes.HasFlagFast(ProtectionModes.Decrypt):
+                    data      = ProtectedData.Unprotect(data, this.options.Password, DataProtectionScope.CurrentUser);
                     finalPath = Path.ChangeExtension(file.FullName, null);
                     break;
 
@@ -84,8 +85,8 @@ public sealed class Protector(ILogger<Protector> logger) : IDisposable
                     this.Logger.LogWarning("Encryption not enabled, ignoring file {FileName}.", file.FullName);
                     return false;
 
-                case not null when options.ValidModes.HasFlagFast(ProtectionModes.Encrypt):
-                    data      = ProtectedData.Protect(data, options.Password, DataProtectionScope.CurrentUser);
+                case not null when this.options.ValidModes.HasFlagFast(ProtectionModes.Encrypt):
+                    data      = ProtectedData.Protect(data, this.options.Password, DataProtectionScope.CurrentUser);
                     finalPath = file.FullName + ENCRYPTED_EXTENSION;
                     break;
 

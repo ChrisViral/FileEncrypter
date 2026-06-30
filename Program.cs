@@ -15,8 +15,6 @@ Cli.Ext.ConfigureServices(services =>
     {
         builder.AddSerilog(Log.Logger, true);
     });
-
-    services.AddSingleton<Protector>();
 });
 
 if (args is [])

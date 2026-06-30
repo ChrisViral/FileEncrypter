@@ -1,13 +1,12 @@
 ﻿using System.Text;
 using DotMake.CommandLine;
+using Microsoft.Extensions.Logging;
 
 namespace FileEncrypter;
 
 [CliCommand(Description = "Protects files by encrypting them with a Windows User specific key.")]
-public sealed class ProtectorCommand(Protector protector) : ICliRunAsyncWithContextAndReturn
+public sealed class ProtectorCommand(ILogger<Protector> logger) : ICliRunAsyncWithContextAndReturn
 {
-    private Protector Protector { get; } = protector;
-
     [CliArgument(Description = "The files or folders to protect",
                  Arity = CliArgumentArity.OneOrMore, ValidationRules = CliValidationRules.ExistingFileOrDirectory)]
     public FileSystemInfo[] Targets { get; set; } = [];
@@ -33,7 +32,8 @@ public sealed class ProtectorCommand(Protector protector) : ICliRunAsyncWithCont
     {
         byte[]? passwordBytes = !string.IsNullOrEmpty(this.Password) ? Encoding.UTF8.GetBytes(this.Password) : null;
         ProtectionOptions options = new(passwordBytes, this.Modes, this.SearchPattern, this.SearchOption);
-        bool success = await this.Protector.ProtectAll(this.Targets, options).ConfigureAwait(false);
+        using Protector protector = new(logger, options);
+        bool success = await protector.ProtectAll(this.Targets).ConfigureAwait(false);
         return success ? 0 : 1;
     }
 }

@@ -1,89 +1,59 @@
 ﻿using System.Security.Cryptography;
 using JetBrains.Annotations;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Console;
 
 namespace FileEncrypter;
 
-[Flags, PublicAPI]
-public enum ProtectionModes
-{
-    NONE    = 0b00,
-    ENCRYPT = 0b01,
-    DECRYPT = 0b10,
-    ALL     = 0b11
-}
-
-public static class ProtectionModesExtensions
-{
-    public static bool HasFlagFast(this ProtectionModes value, ProtectionModes flag) => (value & flag) is not 0;
-}
-
 [PublicAPI]
-public sealed class Protector : IDisposable
+public sealed class Protector(ILogger<Protector> logger) : IDisposable
 {
     private const string ENCRYPTED_EXTENSION = ".enc";
 
-    private readonly ProtectionOptions options;
-    private readonly int fileTimeout;
     private readonly CancellationTokenSource source = new();
 
-    private ILogger Logger { get; }
-
-    public Protector(in ProtectionOptions options, int fileTimeout = 1000)
-    {
-        this.options = options;
-        using ILoggerFactory factory = LoggerFactory.Create(b => b.AddSimpleConsole(o =>
-        {
-            o.SingleLine      = true;
-            o.TimestampFormat = "HH:mm:ss ";
-            o.ColorBehavior   = LoggerColorBehavior.Enabled;
-        }));
-        this.Logger      = factory.CreateLogger(string.Empty);
-        this.fileTimeout = fileTimeout;
-    }
+    private ILogger Logger { get; } = logger;
 
     public void Dispose() => this.source.Dispose();
 
-    public async Task<bool> ProtectAll(FileSystemInfo[] targets)
+    public async Task<bool> ProtectAll(FileSystemInfo[] targets, ProtectionOptions options)
     {
-        bool noErrors = true;
+        bool success = true;
         foreach (FileSystemInfo target in targets)
         {
             switch (target)
             {
                 case FileInfo file:
-                    this.source.CancelAfter(this.fileTimeout);
-                    noErrors &= await ProtectFile(file, this.source.Token).ConfigureAwait(false);
+                    this.source.CancelAfter(options.FileTimeout);
+                    success &= await ProtectFile(file, options, this.source.Token).ConfigureAwait(false);
                     this.source.TryReset();
                     break;
 
                 case DirectoryInfo directory:
-                    noErrors &= await ProtectDirectory(directory).ConfigureAwait(false);
+                    success &= await ProtectDirectory(directory, options).ConfigureAwait(false);
                     break;
 
                 default:
                     this.Logger.LogError("Unidentified FileSystemInfo object ({TypeName}: {Target})", target.GetType().FullName, target);
-                    noErrors = false;
+                    success = false;
                     break;
             }
         }
-        return noErrors;
+        return success;
     }
 
-    public async Task<bool> ProtectDirectory(DirectoryInfo directory)
+    public async Task<bool> ProtectDirectory(DirectoryInfo directory, ProtectionOptions options)
     {
         bool noErrors = true;
-        foreach (FileInfo file in directory.EnumerateFiles(this.options.SearchPattern, this.options.SearchOption))
+        foreach (FileInfo file in directory.EnumerateFiles(options.SearchPattern, options.SearchOption))
         {
-            this.source.CancelAfter(this.fileTimeout);
-            noErrors &= await ProtectFile(file, this.source.Token).ConfigureAwait(false);
+            this.source.CancelAfter(options.FileTimeout);
+            noErrors &= await ProtectFile(file, options, this.source.Token).ConfigureAwait(false);
             this.source.TryReset();
         }
         return noErrors;
     }
 
-    public async Task<bool> ProtectFile(FileInfo file, CancellationToken token)
+    public async Task<bool> ProtectFile(FileInfo file, ProtectionOptions options, CancellationToken token)
     {
         this.Logger.LogInformation("{Action} file {FileName}.", file.Extension is ENCRYPTED_EXTENSION ? "Decrypting" : "Encrypting", file.FullName);
 
@@ -105,8 +75,8 @@ public sealed class Protector : IDisposable
             string finalPath;
             switch (file.Extension)
             {
-                case ENCRYPTED_EXTENSION when this.options.ValidModes.HasFlagFast(ProtectionModes.DECRYPT):
-                    data      = ProtectedData.Unprotect(data, this.options.Password, DataProtectionScope.CurrentUser);
+                case ENCRYPTED_EXTENSION when options.ValidModes.HasFlagFast(ProtectionModes.Decrypt):
+                    data      = ProtectedData.Unprotect(data, options.Password, DataProtectionScope.CurrentUser);
                     finalPath = Path.ChangeExtension(file.FullName, null);
                     break;
 
@@ -114,8 +84,8 @@ public sealed class Protector : IDisposable
                     this.Logger.LogWarning("Encryption not enabled, ignoring file {FileName}.", file.FullName);
                     return false;
 
-                case not null when this.options.ValidModes.HasFlagFast(ProtectionModes.ENCRYPT):
-                    data      = ProtectedData.Protect(data, this.options.Password, DataProtectionScope.CurrentUser);
+                case not null when options.ValidModes.HasFlagFast(ProtectionModes.Encrypt):
+                    data      = ProtectedData.Protect(data, options.Password, DataProtectionScope.CurrentUser);
                     finalPath = file.FullName + ENCRYPTED_EXTENSION;
                     break;
 

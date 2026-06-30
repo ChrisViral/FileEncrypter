@@ -5,14 +5,14 @@ using Microsoft.Extensions.Logging;
 namespace FileEncrypter;
 
 [PublicAPI]
-public sealed class Protector(ILogger<Protector> logger, in ProtectionOptions options) : IDisposable
+public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOptions options) : IDisposable
 {
     private const string ENCRYPTED_EXTENSION = ".enc";
 
     private readonly CancellationTokenSource source = new();
+    private readonly ProtectionOptions options = options;
 
     private ILogger Logger { get; } = logger;
-    private readonly ProtectionOptions options = options;
 
     public void Dispose() => this.source.Dispose();
 
@@ -34,7 +34,7 @@ public sealed class Protector(ILogger<Protector> logger, in ProtectionOptions op
                     break;
 
                 default:
-                    this.Logger.LogError("Unidentified FileSystemInfo object ({TypeName}: {Target})", target.GetType().FullName, target);
+                    LogUnidentifiedFilesysteminfoObjectTypenameTarget(this.Logger, target.GetType().FullName!, target);
                     success = false;
                     break;
             }
@@ -56,7 +56,7 @@ public sealed class Protector(ILogger<Protector> logger, in ProtectionOptions op
 
     public async Task<bool> ProtectFile(FileInfo file, CancellationToken token)
     {
-        this.Logger.LogInformation("{Action} file {FileName}.", file.Extension is ENCRYPTED_EXTENSION ? "Decrypting" : "Encrypting", file.FullName);
+        LogActionFileFilename(this.Logger, file.Extension is ENCRYPTED_EXTENSION ? "Decrypting" : "Encrypting", file.FullName);
 
         try
         {
@@ -82,7 +82,7 @@ public sealed class Protector(ILogger<Protector> logger, in ProtectionOptions op
                     break;
 
                 case ENCRYPTED_EXTENSION:
-                    this.Logger.LogWarning("Encryption not enabled, ignoring file {FileName}.", file.FullName);
+                    LogEncryptionNotEnabledIgnoringFileFilename(this.Logger, file.FullName);
                     return false;
 
                 case not null when this.options.ValidModes.HasFlagFast(ProtectionModes.Encrypt):
@@ -91,7 +91,7 @@ public sealed class Protector(ILogger<Protector> logger, in ProtectionOptions op
                     break;
 
                 default:
-                    this.Logger.LogWarning("Decryption not enabled, ignoring file {FileName}.", file.FullName);
+                    LogDecryptionNotEnabledIgnoringFileFilename(this.Logger, file.FullName);
                     return false;
             }
 
@@ -106,7 +106,7 @@ public sealed class Protector(ILogger<Protector> logger, in ProtectionOptions op
         catch (Exception e)
         {
             //Log any exceptions
-            this.Logger.LogError(e, "Error happened for file {FileName}", file.FullName);
+            LogErrorHappenedForFileFilename(this.Logger, file.FullName, e);
             return false;
         }
     }

@@ -18,4 +18,7 @@ public partial class Protector
 
     [LoggerMessage(LogLevel.Error, "Error happened for file {FileName}")]
     static partial void LogErrorHappenedForFileFilename(ILogger logger, string fileName, Exception exception);
+
+    [LoggerMessage(LogLevel.Error, "File {FileName} too large to handle.")]
+    static partial void LogFileFilenameTooLargeToHandle(ILogger logger, string fileName);
 }

@@ -17,6 +17,7 @@ Cli.Ext.ConfigureServices(services =>
     });
 });
 
+// If no args passed, default to help
 if (args is [])
 {
     args = ["-h"];

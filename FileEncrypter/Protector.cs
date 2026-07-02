@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Numerics;
 using System.Security.Cryptography;
 using JetBrains.Annotations;
@@ -125,7 +125,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         PooledArray<byte> buffer = new(data.Length);
         try
         {
-            if (ProtectedData.TryUnprotect(data.Span, DataProtectionScope.CurrentUser, buffer.AsSpan, out decryptedSize, this.options.Password))
+            if (ProtectedData.TryUnprotect(data.Span, this.options.Scope, buffer.AsSpan, out decryptedSize, this.options.Password))
             {
                 decrypted = buffer;
                 return true;
@@ -152,7 +152,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             PooledArray<byte> buffer = new((int)bufferSize);
             try
             {
-                if (ProtectedData.TryProtect(data.Span, DataProtectionScope.CurrentUser, buffer.AsSpan, out encryptedSize, this.options.Password))
+                if (ProtectedData.TryProtect(data.Span, this.options.Scope, buffer.AsSpan, out encryptedSize, this.options.Password))
                 {
                     encrypted = buffer;
                     return true;

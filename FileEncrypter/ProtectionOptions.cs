@@ -1,7 +1,10 @@
-﻿namespace FileEncrypter;
+﻿using System.Security.Cryptography;
+
+namespace FileEncrypter;
 
 public readonly record struct ProtectionOptions(byte[]? Password = null,
                                                 ProtectionModes ValidModes = ProtectionModes.All,
                                                 string SearchPattern = "*",
                                                 SearchOption SearchOption = SearchOption.TopDirectoryOnly,
-                                                int FileTimeout = 1000);
+                                                DataProtectionScope Scope = DataProtectionScope.CurrentUser,
+                                                int FileTimeout = -1);

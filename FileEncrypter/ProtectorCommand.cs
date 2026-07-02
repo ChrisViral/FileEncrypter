@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Security.Cryptography;
+using System.Text;
 using DotMake.CommandLine;
 using Microsoft.Extensions.Logging;
 
@@ -24,14 +25,22 @@ public sealed class ProtectorCommand(ILogger<Protector> logger) : ICliRunAsyncWi
     public string SearchPattern { get; set; } = "*";
 
     [CliOption(Description = "Include subdirectories when protecting folders",
-               Arity = CliArgumentArity.ZeroOrOne)]
+               Arity = CliArgumentArity.ZeroOrOne, Name = "--search-option", Alias = "-so")]
     public SearchOption SearchOption { get; set; } = SearchOption.TopDirectoryOnly;
+
+    [CliOption(Description = "The timeout for individual file encryption/decryption, in ms (-1 means no timeout)",
+               Arity = CliArgumentArity.ZeroOrOne, Alias = "-t")]
+    public int Timeout { get; set; } = -1;
+
+    [CliOption(Description = "Protection scope for the files",
+               Arity = CliArgumentArity.ZeroOrOne, Alias = "-sc")]
+    public DataProtectionScope Scope { get; set; } = DataProtectionScope.CurrentUser;
 
     /// <inheritdoc />
     public async Task<int> RunAsync(CliContext cliContext)
     {
         byte[]? passwordBytes = !string.IsNullOrEmpty(this.Password) ? Encoding.UTF8.GetBytes(this.Password) : null;
-        ProtectionOptions options = new(passwordBytes, this.Modes, this.SearchPattern, this.SearchOption);
+        ProtectionOptions options = new(passwordBytes, this.Modes, this.SearchPattern, this.SearchOption, this.Scope, this.Timeout);
         using Protector protector = new(logger, options);
         bool success = await protector.ProtectAll(this.Targets).ConfigureAwait(false);
         return success ? 0 : 1;

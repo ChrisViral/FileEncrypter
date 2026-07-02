@@ -1,5 +1,7 @@
 ﻿using System.Buffers;
 using System.Collections;
+using System.Diagnostics;
+using FileEncrypter.DebugViews;
 using JetBrains.Annotations;
 
 namespace FileEncrypter;
@@ -9,7 +11,7 @@ namespace FileEncrypter;
 /// </summary>
 /// <param name="length">Length of the pooled array to create</param>
 /// <typeparam name="T">Array element type</typeparam>
-[PublicAPI]
+[PublicAPI, DebuggerDisplay("Length = {Length}"), DebuggerTypeProxy(typeof(CollectionDebugView<>))]
 public struct PooledArray<T>(int length) : IList<T>, IDisposable
 {
     private bool isDisposed;
@@ -125,7 +127,7 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
         ArrayPool<T>.Shared.Return(this.array);
     }
 
-    readonly int ICollection<T>.Count => this.array.Length;
+    readonly int ICollection<T>.Count => this.Length;
     readonly bool ICollection<T>.IsReadOnly => this.array.IsReadOnly;
     readonly void ICollection<T>.Add(T item) => ((ICollection<T>)this.array).Add(item);
     readonly bool ICollection<T>.Remove(T item) => ((ICollection<T>)this.array).Remove(item);
@@ -134,6 +136,10 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
     readonly IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetEnumerator();
     readonly IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+    /// <summary>
+    /// Pooled array enumerator
+    /// </summary>
+    /// <param name="pooledArray">Array to enumerate</param>
     public struct Enumerator(PooledArray<T> pooledArray) : IEnumerator<T>
     {
         private int index = -1;

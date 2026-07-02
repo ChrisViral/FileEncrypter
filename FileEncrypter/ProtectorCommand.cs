@@ -36,6 +36,10 @@ public sealed class ProtectorCommand(ILogger<Protector> logger) : ICliRunAsyncWi
                Arity = CliArgumentArity.ZeroOrOne, Alias = "-nc")]
     public bool NoCompression { get; set; }
 
+    [CliOption(Description = "If old files should be kept after being processed",
+               Arity = CliArgumentArity.ZeroOrOne, Alias = "-kf")]
+    public bool KeepFiles { get; set; }
+
     [CliOption(Description = "The timeout for individual file encryption/decryption, in ms (-1 means no timeout)",
                Arity = CliArgumentArity.ZeroOrOne, Alias = "-t")]
     public int Timeout { get; set; } = -1;
@@ -44,7 +48,7 @@ public sealed class ProtectorCommand(ILogger<Protector> logger) : ICliRunAsyncWi
     public async Task<int> RunAsync(CliContext cliContext)
     {
         byte[]? passwordBytes = !string.IsNullOrEmpty(this.Password) ? Encoding.UTF8.GetBytes(this.Password) : null;
-        ProtectionOptions options = new(passwordBytes, this.Modes, this.SearchPattern, this.SearchOption, this.Scope, !this.NoCompression, this.Timeout);
+        ProtectionOptions options = new(passwordBytes, this.Modes, this.SearchPattern, this.SearchOption, this.Scope, !this.NoCompression, !this.KeepFiles, this.Timeout);
         using Protector protector = new(logger, options);
         bool success = await protector.ProtectAll(this.Targets).ConfigureAwait(false);
         return success ? 0 : 1;

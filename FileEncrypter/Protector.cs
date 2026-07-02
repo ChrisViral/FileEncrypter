@@ -120,9 +120,10 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
                 await SaveData(encryptedMemory, path, token).ConfigureAwait(false);
             }
         }
-#if !DEBUG
-                    file.Delete();
-#endif
+        if (this.options.DeleteFiles)
+        {
+            file.Delete();
+        }
         return true;
     }
 
@@ -144,9 +145,11 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
                 await SaveData(decryptedMemory, path, token).ConfigureAwait(false);
             }
         }
-#if !DEBUG
-                    file.Delete();
-#endif
+
+        if (this.options.DeleteFiles)
+        {
+            file.Delete();
+        }
         return true;
     }
 

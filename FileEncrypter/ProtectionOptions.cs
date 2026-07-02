@@ -8,4 +8,5 @@ public readonly record struct ProtectionOptions(byte[]? Password = null,
                                                 SearchOption SearchOption = SearchOption.TopDirectoryOnly,
                                                 DataProtectionScope Scope = DataProtectionScope.CurrentUser,
                                                 bool Compress = true,
+                                                bool DeleteFiles = true,
                                                 int FileTimeout = -1);

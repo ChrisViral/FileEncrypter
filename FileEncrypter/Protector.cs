@@ -1,4 +1,6 @@
-﻿using System.Diagnostics;
+﻿using System.Buffers.Binary;
+using System.Diagnostics;
+using System.IO.Compression;
 using System.Numerics;
 using System.Security.Cryptography;
 using JetBrains.Annotations;
@@ -78,34 +80,14 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             switch (file.Extension)
             {
                 case ENCRYPTED_EXTENSION when this.options.ValidModes.HasFlagFast(ProtectionModes.Decrypt):
-                    if (!TryUnprotectData(data.AsMemory, out PooledArray<byte> decrypted, out int decryptedSize)) return false;
-
-                    using (decrypted)
-                    {
-                        await SaveData(decrypted.AsMemory[..decryptedSize], Path.ChangeExtension(file.FullName, null), token).ConfigureAwait(false);
-                    }
-#if !DEBUG
-                    file.Delete();
-#endif
-                    return true;
+                    return await DecryptFile(file, data, token).ConfigureAwait(false);
 
                 case ENCRYPTED_EXTENSION:
                     LogEncryptionNotEnabledIgnoringFileFilename(this.Logger, file.FullName);
                     return false;
 
                 case not null when this.options.ValidModes.HasFlagFast(ProtectionModes.Encrypt):
-                {
-                    if (!TryProtectData(data.AsMemory, out PooledArray<byte> encrypted, out int encryptedSize)) return false;
-
-                    using (encrypted)
-                    {
-                        await SaveData(encrypted.AsMemory[..encryptedSize], file.FullName + ENCRYPTED_EXTENSION, token).ConfigureAwait(false);
-                    }
-#if !DEBUG
-                    file.Delete();
-#endif
-                    return true;
-                }
+                    return await EncryptFile(file, data, token).ConfigureAwait(false);
 
                 default:
                     LogDecryptionNotEnabledIgnoringFileFilename(this.Logger, file.FullName);
@@ -118,6 +100,54 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             LogErrorHappenedForFileFilename(this.Logger, file.FullName, e);
             return false;
         }
+    }
+
+    private async Task<bool> EncryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
+    {
+        if (!TryProtectData(data.AsMemory, out PooledArray<byte> encrypted, out int encryptedSize)) return false;
+
+        using (encrypted)
+        {
+            ReadOnlyMemory<byte> encryptedMemory = encrypted.AsMemory[..encryptedSize];
+            string path = file.FullName + ENCRYPTED_EXTENSION;
+            if (this.options.Compress)
+            {
+                using PooledArray<byte> compressed = CompressData(encryptedMemory.Span, out int compressedSize);
+                await SaveData(compressed.AsMemory[..compressedSize], path, token).ConfigureAwait(false);
+            }
+            else
+            {
+                await SaveData(encryptedMemory, path, token).ConfigureAwait(false);
+            }
+        }
+#if !DEBUG
+                    file.Delete();
+#endif
+        return true;
+    }
+
+    private async Task<bool> DecryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
+    {
+        if (!TryUnprotectData(data.AsMemory, out PooledArray<byte> decrypted, out int decryptedSize)) return false;
+
+        using (decrypted)
+        {
+            ReadOnlyMemory<byte> decryptedMemory = decrypted.AsMemory[..decryptedSize];
+            string path = Path.ChangeExtension(file.FullName, null);
+            if (this.options.Compress)
+            {
+                using PooledArray<byte> decompressed = DecompressData(decryptedMemory.Span, out int decompressedSize);
+                await SaveData(decompressed.AsMemory[..decompressedSize], path, token).ConfigureAwait(false);
+            }
+            else
+            {
+                await SaveData(decryptedMemory, path, token).ConfigureAwait(false);
+            }
+        }
+#if !DEBUG
+                    file.Delete();
+#endif
+        return true;
     }
 
     private bool TryUnprotectData(Memory<byte> data, out PooledArray<byte> decrypted, out int decryptedSize)
@@ -177,7 +207,34 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         return false;
     }
 
-    private static async Task SaveData(Memory<byte> data, string path, CancellationToken token)
+    private static PooledArray<byte> DecompressData(ReadOnlySpan<byte> data, out int decompressedSize)
+    {
+        decompressedSize = BinaryPrimitives.ReadInt32LittleEndian(data);
+        PooledArray<byte> decompressed = new(decompressedSize);
+        if (!BrotliDecoder.TryDecompress(data[sizeof(int)..], decompressed.AsSpan, out int written) || written != decompressedSize)
+        {
+            decompressed.Dispose();
+            throw new InvalidOperationException("Could not decompress data correctly");
+        }
+
+        return decompressed;
+    }
+
+    private static PooledArray<byte> CompressData(ReadOnlySpan<byte> data, out int compressedSize)
+    {
+        PooledArray<byte> compressed = new(BrotliEncoder.GetMaxCompressedLength(data.Length + sizeof(int)));
+        if (!BrotliEncoder.TryCompress(data, compressed.AsSpan[sizeof(int)..], out compressedSize))
+        {
+            compressed.Dispose();
+            throw new InvalidOperationException("Could not compress data correctly");
+        }
+
+        compressedSize += sizeof(int);
+        BinaryPrimitives.WriteInt32LittleEndian(compressed.AsSpan, compressedSize);
+        return compressed;
+    }
+
+    private static async Task SaveData(ReadOnlyMemory<byte> data, string path, CancellationToken token)
     {
         if (File.Exists(path))
         {

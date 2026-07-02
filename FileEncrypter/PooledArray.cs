@@ -14,13 +14,14 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
 {
     private bool isDisposed;
     private readonly T[] array = ArrayPool<T>.Shared.Rent(length);
+    private static readonly Type SelfType = typeof(PooledArray<T>);
 
     /// <inheritdoc cref="System.Array.Length"/>
     public int Length { get; } = length;
 
     /// <inheritdoc />
     /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
-    public T this[int index]
+    public readonly T this[int index]
     {
         get => this.AsSpan[index];
         set => this.AsSpan[index] = value;
@@ -28,7 +29,7 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
 
     /// <inheritdoc cref="System.Span{T}.Item(System.Int32)"/>
     /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
-    public T this[Index index]
+    public readonly T this[Index index]
     {
         get => this.AsSpan[index];
         set => this.AsSpan[index] = value;
@@ -39,17 +40,17 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
     /// </summary>
     /// <param name="range">Index range to get the slice for</param>
     /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
-    public Span<T> this[Range range] => this.AsSpan[range];
+    public readonly Span<T> this[Range range] => this.AsSpan[range];
 
     /// <summary>
     /// Gets a span of the given pooled array
     /// </summary>
     /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
-    public Span<T> AsSpan
+    public readonly Span<T> AsSpan
     {
         get
         {
-            ObjectDisposedException.ThrowIf(this.isDisposed, GetType());
+            ObjectDisposedException.ThrowIf(this.isDisposed, typeof(PooledArray<T>));
             return this.array.AsSpan(0, this.Length);
         }
     }
@@ -58,11 +59,11 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
     /// Gets a memory block of the given pooled array
     /// </summary>
     /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
-    public Memory<T> AsMemory
+    public readonly Memory<T> AsMemory
     {
         get
         {
-            ObjectDisposedException.ThrowIf(this.isDisposed, GetType());
+            ObjectDisposedException.ThrowIf(this.isDisposed, typeof(PooledArray<T>));
             return this.array.AsMemory(0, this.Length);
         }
     }
@@ -72,11 +73,11 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
     /// </summary>
     /// <remarks><b>WARNING</b>: The length of the actual array may be larger than the requested length of the pooled array.</remarks>
     /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
-    public T[] AsRawArray
+    public readonly T[] AsRawArray
     {
         get
         {
-            ObjectDisposedException.ThrowIf(this.isDisposed, GetType());
+            ObjectDisposedException.ThrowIf(this.isDisposed, typeof(PooledArray<T>));
             return this.array;
         }
     }
@@ -86,32 +87,32 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
     /// </summary>
     /// <returns>A reference to the element at the specified index.</returns>
     /// <inheritdoc cref="Item(System.Int32)"/>
-    public ref T GetRef(int index) => ref this.AsSpan[index];
+    public readonly ref T GetRef(int index) => ref this.AsSpan[index];
 
     /// <inheritdoc cref="GetRef(System.Int32)"/>
-    public ref T GetRef(Index index) => ref this.AsSpan[index];
+    public readonly ref T GetRef(Index index) => ref this.AsSpan[index];
 
     /// <inheritdoc />
     /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
-    public bool Contains(T item) => this.AsSpan.Contains(item);
+    public readonly bool Contains(T item) => this.AsSpan.Contains(item);
 
     /// <inheritdoc />
     /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
-    public void CopyTo(T[] otherArray, int arrayIndex) => this.AsSpan.CopyTo(otherArray.AsSpan(arrayIndex));
+    public readonly void CopyTo(T[] otherArray, int arrayIndex) => this.AsSpan.CopyTo(otherArray.AsSpan(arrayIndex));
 
     /// <inheritdoc />
     /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
-    public int IndexOf(T item) => this.AsSpan.IndexOf(item);
+    public readonly int IndexOf(T item) => this.AsSpan.IndexOf(item);
 
     /// <inheritdoc />
     /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
-    public void Clear() => this.AsSpan.Clear();
+    public readonly void Clear() => this.AsSpan.Clear();
 
     /// <inheritdoc cref="IEnumerable{T}.GetEnumerator()" />
     /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
-    public Enumerator GetEnumerator()
+    public readonly Enumerator GetEnumerator()
     {
-        ObjectDisposedException.ThrowIf(this.isDisposed, GetType());
+        ObjectDisposedException.ThrowIf(this.isDisposed, typeof(PooledArray<T>));
         return new Enumerator(this);
     }
 
@@ -124,27 +125,28 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
         ArrayPool<T>.Shared.Return(this.array);
     }
 
-    int ICollection<T>.Count => this.array.Length;
-    bool ICollection<T>.IsReadOnly => this.array.IsReadOnly;
-    void ICollection<T>.Add(T item) => ((ICollection<T>)this.array).Add(item);
-    bool ICollection<T>.Remove(T item) => ((ICollection<T>)this.array).Remove(item);
-    void IList<T>.Insert(int index, T item) => ((IList<T>)this.array).Insert(index, item);
-    void IList<T>.RemoveAt(int index) => ((IList<T>)this.array).RemoveAt(index);
-    IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetEnumerator();
-    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    readonly int ICollection<T>.Count => this.array.Length;
+    readonly bool ICollection<T>.IsReadOnly => this.array.IsReadOnly;
+    readonly void ICollection<T>.Add(T item) => ((ICollection<T>)this.array).Add(item);
+    readonly bool ICollection<T>.Remove(T item) => ((ICollection<T>)this.array).Remove(item);
+    readonly void IList<T>.Insert(int index, T item) => ((IList<T>)this.array).Insert(index, item);
+    readonly void IList<T>.RemoveAt(int index) => ((IList<T>)this.array).RemoveAt(index);
+    readonly IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetEnumerator();
+    readonly IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     public struct Enumerator(PooledArray<T> pooledArray) : IEnumerator<T>
     {
         private int index = -1;
+        private readonly PooledArray<T> pooledArray = pooledArray;
 
         /// <inheritdoc />
-        public T Current => pooledArray.AsSpan[this.index];
+        public readonly T Current => this.pooledArray.AsSpan[this.index];
 
         /// <inheritdoc />
-        public bool MoveNext() => ++this.index < pooledArray.Length;
+        public bool MoveNext() => ++this.index < this.pooledArray.Length;
 
-        object? IEnumerator.Current => pooledArray.AsSpan[this.index];
+        readonly object? IEnumerator.Current => this.pooledArray.AsSpan[this.index];
         void IEnumerator.Reset() => this.index = -1;
-        void IDisposable.Dispose() { }
+        readonly void IDisposable.Dispose() { }
     }
 }

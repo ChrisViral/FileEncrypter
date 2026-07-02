@@ -104,22 +104,25 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
 
     private async Task<bool> EncryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
     {
-        if (!TryProtectData(data.AsMemory, out PooledArray<byte> encrypted, out int encryptedSize)) return false;
+        PooledArray<byte> encrypted;
+        int encryptedSize;
+        if (this.options.Compress)
+        {
+            using PooledArray<byte> compressed = CompressData(data.AsSpan, out int compressedSize);
+            if (!TryProtectData(compressed.AsMemory[..compressedSize], out encrypted, out encryptedSize)) return false;
+        }
+        else
+        {
+            if (!TryProtectData(data.AsMemory, out encrypted, out encryptedSize)) return false;
+        }
 
         using (encrypted)
         {
             ReadOnlyMemory<byte> encryptedMemory = encrypted.AsMemory[..encryptedSize];
             string path = file.FullName + ENCRYPTED_EXTENSION;
-            if (this.options.Compress)
-            {
-                using PooledArray<byte> compressed = CompressData(encryptedMemory.Span, out int compressedSize);
-                await SaveData(compressed.AsMemory[..compressedSize], path, token).ConfigureAwait(false);
-            }
-            else
-            {
-                await SaveData(encryptedMemory, path, token).ConfigureAwait(false);
-            }
+            await SaveData(encryptedMemory, path, token).ConfigureAwait(false);
         }
+
         if (this.options.DeleteFiles)
         {
             file.Delete();
@@ -225,7 +228,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
 
     private static PooledArray<byte> CompressData(ReadOnlySpan<byte> data, out int compressedSize)
     {
-        PooledArray<byte> compressed = new(BrotliEncoder.GetMaxCompressedLength(data.Length + sizeof(int)));
+        PooledArray<byte> compressed = new(BrotliEncoder.GetMaxCompressedLength(data.Length) + sizeof(int));
         if (!BrotliEncoder.TryCompress(data, compressed.AsSpan[sizeof(int)..], out compressedSize))
         {
             compressed.Dispose();
@@ -233,7 +236,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         }
 
         compressedSize += sizeof(int);
-        BinaryPrimitives.WriteInt32LittleEndian(compressed.AsSpan, compressedSize);
+        BinaryPrimitives.WriteInt32LittleEndian(compressed.AsSpan, data.Length);
         return compressed;
     }
 

@@ -17,12 +17,7 @@ namespace FileEncrypter;
 [PublicAPI]
 public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOptions options) : IDisposable
 {
-    /// <summary>
-    /// Encrypted file extension
-    /// </summary>
-    private const string ENCRYPTED_EXTENSION = ".enc";
-
-    private readonly CancellationTokenSource source = new();
+    private CancellationTokenSource source = new();
     private readonly ProtectionOptions options = options;
 
     /// <summary>
@@ -32,6 +27,23 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
 
     /// <inheritdoc/>
     public void Dispose() => this.source.Dispose();
+
+    /// <summary>
+    /// Resets the token sour if used up and starts the cancellation timer if needed
+    /// </summary>
+    private void RestartTokenSource()
+    {
+        if (this.source.IsCancellationRequested)
+        {
+            this.source.Dispose();
+            this.source = new CancellationTokenSource();
+        }
+
+        if (this.options.FileTimeout > 0)
+        {
+            this.source.CancelAfter(this.options.FileTimeout);
+        }
+    }
 
     /// <summary>
     /// Protects all files and folders given
@@ -49,7 +61,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             {
                 case FileInfo file:
                     // Compress files immediately
-                    this.source.CancelAfter(this.options.FileTimeout);
+                    RestartTokenSource();
                     result = await ProtectFile(file, this.source.Token).ConfigureAwait(false);
                     this.source.TryReset();
                     break;
@@ -85,14 +97,13 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         int failures = 0;
         foreach (FileInfo file in directory.EnumerateFiles(this.options.SearchPattern, this.options.SearchOption))
         {
-            this.source.CancelAfter(this.options.FileTimeout);
+            RestartTokenSource();
             Result result = await ProtectFile(file, this.source.Token).ConfigureAwait(false);
+            this.source.TryReset();
             if (result.IsFailure)
             {
                 failures++;
             }
-
-            this.source.TryReset();
         }
         return Result.SuccessIf(failures is 0, $"{failures} failures while protecting directory contents");
     }
@@ -106,20 +117,20 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     public async Task<Result> ProtectFile(FileInfo file, CancellationToken token)
     {
         // Check if file can be decrypted
-        if (file.Extension is ENCRYPTED_EXTENSION && !this.options.ValidModes.HasFlagFast(ProtectionModes.Decrypt))
+        if (file.Extension == this.options.EncryptedExtension && !this.options.ValidModes.HasFlagFast(ProtectionModes.Decrypt))
         {
             LogDecryptionNotEnabledIgnoringFileFilename(this.Logger, file.FullName);
             return Result.Failure("Decryption not enabled");
         }
 
         // Check if file can be encrypted
-        if (file.Extension is not ENCRYPTED_EXTENSION && !this.options.ValidModes.HasFlagFast(ProtectionModes.Encrypt))
+        if (file.Extension != this.options.EncryptedExtension && !this.options.ValidModes.HasFlagFast(ProtectionModes.Encrypt))
         {
             LogEncryptionNotEnabledIgnoringFileFilename(this.Logger, file.FullName);
             return Result.Failure("Encryption not enabled");
         }
 
-        LogActionFileFilename(this.Logger, file.Extension is ENCRYPTED_EXTENSION ? "Decrypting" : "Encrypting", file.FullName);
+        LogActionFileFilename(this.Logger, file.Extension == this.options.EncryptedExtension ? "Decrypting" : "Encrypting", file.FullName);
 
         try
         {
@@ -139,11 +150,9 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             }
 
             // Handle file
-            return file.Extension switch
-            {
-                ENCRYPTED_EXTENSION => await DecryptFile(file, data, token).ConfigureAwait(false),
-                _                   => await EncryptFile(file, data, token).ConfigureAwait(false)
-            };
+            return file.Extension == this.options.EncryptedExtension
+                       ? await DecryptFile(file, data, token).ConfigureAwait(false)
+                       : await EncryptFile(file, data, token).ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -182,7 +191,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         {
             // Save encrypted file to disk
             ReadOnlyMemory<byte> encryptedMemory = encrypted.AsMemory[..encryptedSize];
-            string path = file.FullName + ENCRYPTED_EXTENSION;
+            string path = file.FullName + this.options.EncryptedExtension;
             await SaveData(encryptedMemory, path, token).ConfigureAwait(false);
         }
 

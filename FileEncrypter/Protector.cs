@@ -190,9 +190,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         using (encrypted)
         {
             // Save encrypted file to disk
-            ReadOnlyMemory<byte> encryptedMemory = encrypted.AsMemory[..encryptedSize];
-            string path = file.FullName + this.options.EncryptedExtension;
-            await SaveData(encryptedMemory, path, token).ConfigureAwait(false);
+            await SaveData(encrypted.AsMemory[..encryptedSize], file.FullName + this.options.EncryptedExtension, token).ConfigureAwait(false);
         }
 
         // Delete old file if needed
@@ -225,7 +223,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             if (this.options.Compress)
             {
                 // Decompress file before saving
-                using PooledArray<byte> decompressed = await CompressData(data.AsSpan, out int decompressedSize, token).ConfigureAwait(false);
+                using PooledArray<byte> decompressed = await DecompressData(decryptedMemory.Span, out int decompressedSize, token).ConfigureAwait(false);
                 await SaveData(decompressed.AsMemory[..decompressedSize], path, token).ConfigureAwait(false);
             }
             else

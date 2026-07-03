@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Numerics;
 using System.Security.Cryptography;
+using CSharpFunctionalExtensions;
 using JetBrains.Annotations;
 using Microsoft.Extensions.Logging;
 
@@ -37,33 +38,39 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// </summary>
     /// <param name="targets">Array of files and folders to protect</param>
     /// <returns>True if no errors occured, otherwise false</returns>
-    public async Task<bool> ProtectAll(ReadOnlyMemory<FileSystemInfo> targets)
+    public async Task<Result> ProtectAll(ReadOnlyMemory<FileSystemInfo> targets)
     {
-        bool success = true;
+        int failures = 0;
         for (int i = 0; i < targets.Length; i++)
         {
             FileSystemInfo target = targets.Span[i];
+            Result result;
             switch (target)
             {
                 case FileInfo file:
                     // Compress files immediately
                     this.source.CancelAfter(this.options.FileTimeout);
-                    success &= await ProtectFile(file, this.source.Token).ConfigureAwait(false);
+                    result = await ProtectFile(file, this.source.Token).ConfigureAwait(false);
                     this.source.TryReset();
                     break;
 
                 case DirectoryInfo directory:
                     // Compress all files in folder
-                    success &= await ProtectDirectory(directory).ConfigureAwait(false);
+                    result = await ProtectDirectory(directory).ConfigureAwait(false);
                     break;
 
                 default:
                     LogUnidentifiedFilesysteminfoObjectTypenameTarget(this.Logger, target.GetType().FullName!, target);
-                    success = false;
+                    result = Result.Failure("Unknown filesystem type");
                     break;
             }
+
+            if (result.IsFailure)
+            {
+                failures++;
+            }
         }
-        return success;
+        return Result.SuccessIf(failures is 0, $"{failures} failures while protecting data");
     }
 
     /// <summary>
@@ -71,17 +78,23 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// </summary>
     /// <param name="directory">Directory to look through</param>
     /// <returns>True if no errors occured, otherwise false</returns>
-    public async Task<bool> ProtectDirectory(DirectoryInfo directory)
+    public async Task<Result> ProtectDirectory(DirectoryInfo directory)
     {
         // Enumerate and compress all files
-        bool success = true;
+
+        int failures = 0;
         foreach (FileInfo file in directory.EnumerateFiles(this.options.SearchPattern, this.options.SearchOption))
         {
             this.source.CancelAfter(this.options.FileTimeout);
-            success &= await ProtectFile(file, this.source.Token).ConfigureAwait(false);
+            Result result = await ProtectFile(file, this.source.Token).ConfigureAwait(false);
+            if (result.IsFailure)
+            {
+                failures++;
+            }
+
             this.source.TryReset();
         }
-        return success;
+        return Result.SuccessIf(failures is 0, $"{failures} failures while protecting directory contents");
     }
 
     /// <summary>
@@ -90,20 +103,20 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <param name="file">File to protect</param>
     /// <param name="token">Cancellation token</param>
     /// <returns>True if no errors occured, otherwise false</returns>
-    public async Task<bool> ProtectFile(FileInfo file, CancellationToken token)
+    public async Task<Result> ProtectFile(FileInfo file, CancellationToken token)
     {
         // Check if file can be decrypted
         if (file.Extension is ENCRYPTED_EXTENSION && !this.options.ValidModes.HasFlagFast(ProtectionModes.Decrypt))
         {
             LogDecryptionNotEnabledIgnoringFileFilename(this.Logger, file.FullName);
-            return true;
+            return Result.Failure("Decryption not enabled");
         }
 
         // Check if file can be encrypted
         if (file.Extension is not ENCRYPTED_EXTENSION && !this.options.ValidModes.HasFlagFast(ProtectionModes.Encrypt))
         {
             LogEncryptionNotEnabledIgnoringFileFilename(this.Logger, file.FullName);
-            return true;
+            return Result.Failure("Encryption not enabled");
         }
 
         LogActionFileFilename(this.Logger, file.Extension is ENCRYPTED_EXTENSION ? "Decrypting" : "Encrypting", file.FullName);
@@ -114,7 +127,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             if (file.Length >= int.MaxValue)
             {
                 LogFileFilenameTooLargeToHandle(this.Logger, file.FullName);
-                return false;
+                return Result.Failure("File too large");
             }
 
             // Read file data
@@ -136,7 +149,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         {
             //Log any exceptions
             LogErrorHappenedForFileFilename(this.Logger, file.FullName, e);
-            return false;
+            return Result.Failure("Exception thrown during protection");
         }
     }
 
@@ -147,22 +160,24 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <param name="data">Raw file data data</param>
     /// <param name="token">Cancellation token</param>
     /// <returns>True if no errors occured, otherwise false</returns>
-    private async Task<bool> EncryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
+    private async Task<Result> EncryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
     {
-        PooledArray<byte> encrypted;
-        int encryptedSize;
+        Result<(PooledArray<byte>, int)> protectResult;
         if (this.options.Compress)
         {
             // Compress file data before encryption
-            using PooledArray<byte> compressed = CompressData(data.AsSpan, out int compressedSize);
-            if (!TryProtectData(compressed.AsMemory[..compressedSize], out encrypted, out encryptedSize)) return false;
+            using PooledArray<byte> compressed = await CompressData(data.AsSpan, out int compressedSize, token).ConfigureAwait(false);
+            protectResult = await ProtectData(compressed.AsMemory[..compressedSize], token).ConfigureAwait(false);
         }
         else
         {
             // Simply encrypt file
-            if (!TryProtectData(data.AsMemory, out encrypted, out encryptedSize)) return false;
+            protectResult = await ProtectData(data.AsMemory, token).ConfigureAwait(false);
         }
 
+        if (protectResult.IsFailure) return protectResult.ConvertFailure();
+
+        (PooledArray<byte> encrypted, int encryptedSize) = protectResult.Value;
         using (encrypted)
         {
             // Save encrypted file to disk
@@ -177,7 +192,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             file.Delete();
         }
 
-        return true;
+        return Result.Success();
     }
 
     /// <summary>
@@ -187,11 +202,13 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <param name="data">Encrypted file data</param>
     /// <param name="token">Cancellatio token</param>
     /// <returns>True if no errors occured, otherwise false</returns>
-    private async Task<bool> DecryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
+    private async Task<Result> DecryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
     {
         // Decrypt file
-        if (!TryUnprotectData(data.AsMemory, out PooledArray<byte> decrypted, out int decryptedSize)) return false;
+        Result<(PooledArray<byte>, int)> unprotectResult = await UnprotectData(data.AsMemory, token).ConfigureAwait(false);
+        if (unprotectResult.IsFailure) return unprotectResult.ConvertFailure();
 
+        (PooledArray<byte> decrypted, int decryptedSize) = unprotectResult.Value;
         using (decrypted)
         {
             ReadOnlyMemory<byte> decryptedMemory = decrypted.AsMemory[..decryptedSize];
@@ -199,7 +216,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             if (this.options.Compress)
             {
                 // Decompress file before saving
-                using PooledArray<byte> decompressed = DecompressData(decryptedMemory.Span, out int decompressedSize);
+                using PooledArray<byte> decompressed = await CompressData(data.AsSpan, out int decompressedSize, token).ConfigureAwait(false);
                 await SaveData(decompressed.AsMemory[..decompressedSize], path, token).ConfigureAwait(false);
             }
             else
@@ -215,52 +232,60 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             file.Delete();
         }
 
-        return true;
+        return Result.Success();
     }
 
     /// <summary>
     /// Tries to unprotect the data from a given file
     /// </summary>
     /// <param name="data">Data to unprotect</param>
-    /// <param name="decrypted">Decrypted data output</param>
-    /// <param name="decryptedSize">Decrypted data size output</param>
-    /// <returns><see langword="true"/> if the unprotection was a success, otherwise <see langword="false"/></returns>
+    /// <param name="token">Cancellation token</param>
+    /// <returns>A result object, in case of success, contains a tuple with the decrypted data output and the decrypted data size output</returns>
     /// <exception cref="UnreachableException">If the decrypted data ends up longer than expected</exception>
-    private bool TryUnprotectData(Memory<byte> data, out PooledArray<byte> decrypted, out int decryptedSize)
+    private ValueTask<Result<(PooledArray<byte> decrypted, int decryptedSize)>> UnprotectData(Memory<byte> data, CancellationToken token)
     {
+        // Check for cancellation
+        if (token.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled<Result<(PooledArray<byte>, int)>>(token);
+        }
+
         // Decryption will always make file smaller, so simply get buffer file of same size
         PooledArray<byte> buffer = new(data.Length);
         try
         {
             // Try decrypting file
-            if (ProtectedData.TryUnprotect(data.Span, this.options.Scope, buffer.AsSpan, out decryptedSize, this.options.Password))
+            if (ProtectedData.TryUnprotect(data.Span, this.options.Scope, buffer.AsSpan, out int decryptedSize, this.options.Password))
             {
-                decrypted = buffer;
-                return true;
+                return ValueTask.FromResult(Result.Success((buffer, decryptedSize)));
             }
-
-            throw new UnreachableException("Decrypted data should never be larger than encrypted data.");
         }
         catch (Exception e)
         {
             // In case of error, dispose buffer
             this.Logger.LogError(e, "Error while encrypting data");
             buffer.Dispose();
-            decrypted = default;
-            decryptedSize = 0;
-            return false;
+            return ValueTask.FromException<Result<(PooledArray<byte>, int)>>(e);
         }
+
+        // This should never happen, so throw if it does
+        return ValueTask.FromException<Result<(PooledArray<byte>, int)>>(new UnreachableException("Decrypted data should never be larger than encrypted data."));
     }
 
     /// <summary>
     /// Tries to protect the data from a given file
     /// </summary>
     /// <param name="data">Data to protect</param>
-    /// <param name="encrypted">Encrypted data output</param>
-    /// <param name="encryptedSize">Encrypted data size output</param>
-    /// <returns><see langword="true"/> if the protection was a success, otherwise <see langword="false"/></returns>
-    private bool TryProtectData(Memory<byte> data, out PooledArray<byte> encrypted, out int encryptedSize)
+    /// <param name="token">Cancellation token</param>
+    /// <returns>A result object, in case of success, contains a tuple with the encrypted data output and the encrypted data size output</returns>
+    private ValueTask<Result<(PooledArray<byte> encrypted, int encryptedSize)>> ProtectData(Memory<byte> data, CancellationToken token)
     {
+        // Check for cancellation
+        if (token.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled<Result<(PooledArray<byte>, int)>>(token);
+        }
+
         // Encryption will make file larger, so get a larger buffer to start with
         uint bufferSize = BitOperations.RoundUpToPowerOf2((uint)data.Length + 64U) / 2U;
         do
@@ -271,10 +296,9 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             try
             {
                 // Try encryption file
-                if (ProtectedData.TryProtect(data.Span, this.options.Scope, buffer.AsSpan, out encryptedSize, this.options.Password))
+                if (ProtectedData.TryProtect(data.Span, this.options.Scope, buffer.AsSpan, out int encryptedSize, this.options.Password))
                 {
-                    encrypted = buffer;
-                    return true;
+                    return ValueTask.FromResult(Result.Success((buffer, encryptedSize)));
                 }
             }
             catch (Exception e)
@@ -282,9 +306,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
                 // In case of error, dispose of buffer
                 this.Logger.LogError(e, "Error while encrypting data");
                 buffer.Dispose();
-                encrypted = default;
-                encryptedSize = 0;
-                return false;
+                return ValueTask.FromException<Result<(PooledArray<byte>, int)>>(e);
             }
 
             // Buffer too smal, dispose and try again with larger buffer
@@ -293,20 +315,26 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         while (bufferSize < int.MaxValue); // Once max size reached, abort
 
         this.Logger.LogError("Failed to encrypt data due to output being too large");
-        encrypted = default;
-        encryptedSize = 0;
-        return false;
+        return ValueTask.FromResult(Result.Failure<(PooledArray<byte>, int)>("Failed to encrypt data due to output being too large"));
     }
 
     /// <summary>
     /// Decompresses the given file data
     /// </summary>
     /// <param name="data">Data to decompress</param>
-    /// <param name="decompressedSize">Decompressed size output</param>
-    /// <returns>The decompressed file data</returns>
-    /// <exception cref="InvalidOperationException">If the data failed to decompress</exception>
-    private static PooledArray<byte> DecompressData(ReadOnlySpan<byte> data, out int decompressedSize)
+    /// <param name="decompressedSize">The decompressed data size output</param>
+    /// <param name="token">Cancellation token</param>
+    /// <returns>The decompressed data output</returns>
+    /// <exception cref="InvalidOperationException">If the data could not be decompressed</exception>
+    private static ValueTask<PooledArray<byte>> DecompressData(ReadOnlySpan<byte> data, out int decompressedSize, CancellationToken token)
     {
+        // Check for cancellation
+        if (token.IsCancellationRequested)
+        {
+            decompressedSize = 0;
+            return ValueTask.FromCanceled<PooledArray<byte>>(token);
+        }
+
         // Get decompressed size from file header, and make buffer of that size
         decompressedSize = BinaryPrimitives.ReadInt32LittleEndian(data);
         PooledArray<byte> decompressed = new(decompressedSize);
@@ -316,21 +344,30 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         {
             // In case of error, dispose buffer
             decompressed.Dispose();
-            throw new InvalidOperationException("Could not decompress data correctly");
+            decompressedSize = 0;
+            return ValueTask.FromException<PooledArray<byte>>(new InvalidOperationException("Could not decompress data correctly"));
         }
 
-        return decompressed;
+        return ValueTask.FromResult(decompressed);
     }
 
     /// <summary>
     /// Compresses the given file data
     /// </summary>
     /// <param name="data">Data to compress</param>
-    /// <param name="compressedSize">Compressed size output</param>
-    /// <returns>The compressed file data</returns>
-    /// <exception cref="InvalidOperationException">If the data fails to compress</exception>
-    private static PooledArray<byte> CompressData(ReadOnlySpan<byte> data, out int compressedSize)
+    /// <param name="compressedSize">The compressed data size output</param>
+    /// <param name="token">Cancellation token</param>
+    /// <returns>The compressed data output</returns>
+    /// <exception cref="InvalidOperationException">If the data could not be compressed</exception>
+    private static ValueTask<PooledArray<byte>> CompressData(ReadOnlySpan<byte> data, out int compressedSize, CancellationToken token)
     {
+        // Check for cancellation
+        if (token.IsCancellationRequested)
+        {
+            compressedSize = 0;
+            return ValueTask.FromCanceled<PooledArray<byte>>(token);
+        }
+
         // Get max compressed size buffer
         PooledArray<byte> compressed = new(BrotliEncoder.GetMaxCompressedLength(data.Length) + sizeof(int));
 
@@ -339,13 +376,14 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         {
             // In case of error, dispose buffer
             compressed.Dispose();
-            throw new InvalidOperationException("Could not compress data correctly");
+            compressedSize = 0;
+            return ValueTask.FromException<PooledArray<byte>>(new InvalidOperationException("Could not decompress data correctly"));
         }
 
         // Write original file size to header
         compressedSize += sizeof(int);
         BinaryPrimitives.WriteInt32LittleEndian(compressed.AsSpan, data.Length);
-        return compressed;
+        return ValueTask.FromResult(compressed);
     }
 
     /// <summary>

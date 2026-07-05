@@ -21,7 +21,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <summary>
     /// Parallel loop state
     /// </summary>
-    private sealed class State
+    internal sealed class State
     {
         /// <summary>
         /// Failure count
@@ -29,8 +29,8 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         public int failures;
     }
 
-    private const int NONCOMPRESSED_HEADER_SIZE = sizeof(byte);
-    private const int COMPRESSED_HEADER_SIZE = sizeof(byte) + sizeof(int);
+    internal const int NONCOMPRESSED_HEADER_SIZE = sizeof(byte);
+    internal const int COMPRESSED_HEADER_SIZE    = NONCOMPRESSED_HEADER_SIZE + sizeof(int);
 
     private readonly ProtectionOptions options = options;
 
@@ -78,7 +78,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <param name="file">File to protect</param>
     /// <param name="token">Cancellation token</param>
     /// <returns>True if no errors occured, otherwise false</returns>
-    private async Task<Result> ProtectFile(FileInfo file, CancellationToken token)
+    internal async Task<Result> ProtectFile(FileInfo file, CancellationToken token)
     {
         if (file.Extension == this.options.EncryptedExtension && !this.options.ValidModes.HasFlagFast(ProtectionModes.Decrypt))
         {
@@ -130,7 +130,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// </summary>
     /// <param name="targets">FileSystemInfo targets to enumerate from</param>
     /// <returns></returns>
-    private IEnumerable<FileInfo?> GetFilesToProtect(ReadOnlyMemory<FileSystemInfo> targets)
+    internal IEnumerable<FileInfo?> GetFilesToProtect(ReadOnlyMemory<FileSystemInfo> targets)
     {
         for (int i = 0; i < targets.Length; i++)
         {
@@ -163,7 +163,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// </summary>
     /// <param name="fileData">Tuple containing the file to protect and the parallel loop state</param>
     /// <param name="token">Cancellation token</param>
-    private async ValueTask ProtectFileParallel((FileInfo?, State) fileData, CancellationToken token)
+    internal async ValueTask ProtectFileParallel((FileInfo?, State) fileData, CancellationToken token)
     {
         // Check cancellation
         token.ThrowIfCancellationRequested();
@@ -200,7 +200,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <param name="data">Raw file data data</param>
     /// <param name="token">Cancellation token</param>
     /// <returns>True if no errors occured, otherwise false</returns>
-    private async Task<Result> EncryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
+    internal async Task<Result> EncryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
     {
         // Compress and then encrypt
         (PooledArray<byte> compressed, int compressedSize) = await CompressData(data.AsMemory, token).ConfigureAwait(false);
@@ -232,7 +232,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <param name="data">Encrypted file data</param>
     /// <param name="token">Cancellatio token</param>
     /// <returns>True if no errors occured, otherwise false</returns>
-    private async Task<Result> DecryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
+    internal async Task<Result> DecryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
     {
         // Decrypt file
         Result<(PooledArray<byte>, int)> unprotectResult = await UnprotectData(data.AsMemory, token).ConfigureAwait(false);
@@ -266,7 +266,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <param name="token">Cancellation token</param>
     /// <returns>A result object, in case of success, contains a tuple with the decrypted data output and the decrypted data size output</returns>
     /// <exception cref="UnreachableException">If the decrypted data ends up longer than expected</exception>
-    private ValueTask<Result<(PooledArray<byte> decrypted, int decryptedSize)>> UnprotectData(Memory<byte> data, CancellationToken token)
+    internal ValueTask<Result<(PooledArray<byte> decrypted, int decryptedSize)>> UnprotectData(Memory<byte> data, CancellationToken token)
     {
         // Check for cancellation
         if (token.IsCancellationRequested)
@@ -287,7 +287,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         catch (Exception e)
         {
             // In case of error, dispose buffer
-            this.Logger.LogError(e, "Error while encrypting data");
+            this.Logger.LogError(e, "Error while decrypting data");
             buffer.Dispose();
             return ValueTask.FromException<Result<(PooledArray<byte>, int)>>(e);
         }
@@ -302,7 +302,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <param name="data">Data to protect</param>
     /// <param name="token">Cancellation token</param>
     /// <returns>A result object, in case of success, contains a tuple with the encrypted data output and the encrypted data size output</returns>
-    private ValueTask<Result<(PooledArray<byte> encrypted, int encryptedSize)>> ProtectData(Memory<byte> data, CancellationToken token)
+    internal ValueTask<Result<(PooledArray<byte> encrypted, int encryptedSize)>> ProtectData(Memory<byte> data, CancellationToken token)
     {
         // Check for cancellation
         if (token.IsCancellationRequested)
@@ -350,7 +350,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <returns>A tuple containing the compressed data output, and the compressed data output size</returns>
     /// <exception cref="InvalidEnumArgumentException">If the compression option is not a valid value</exception>
     /// <exception cref="InvalidOperationException">If the data could not be compressed</exception>
-    private async Task<(PooledArray<byte> compressed, int compressedSize)> CompressData(ReadOnlyMemory<byte> data, CancellationToken token)
+    internal async Task<(PooledArray<byte> compressed, int compressedSize)> CompressData(ReadOnlyMemory<byte> data, CancellationToken token)
     {
         PooledArray<byte> compressed;
         if (this.options.Compression is CompressionOption.None)
@@ -397,7 +397,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <returns>A tuple containing the decompressed data output, and the decompressed data output size</returns>
     /// <exception cref="InvalidEnumArgumentException">If the compression option is not a valid value</exception>
     /// <exception cref="InvalidOperationException">If the data could not be decompressed</exception>
-    private async Task<(PooledArray<byte> decompressed, int decompressedSize)> DecompressData(PooledArray<byte> data, int dataLength, CancellationToken token)
+    internal static async Task<(PooledArray<byte> decompressed, int decompressedSize)> DecompressData(PooledArray<byte> data, int dataLength, CancellationToken token)
     {
         int decompressedSize;
         CompressionOption compression = (CompressionOption)data[0];
@@ -417,7 +417,17 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         return decompressionResult.IsSuccess ? (decompressionResult.Value, decompressedSize) : throw new InvalidOperationException("Could not decompress data correctly");
     }
 
-    private static async Task<Result<(PooledArray<byte> buffer, int written)>> TryCompressWithStream(int bufferSize, CompressionOption compression, ReadOnlyMemory<byte> data, CancellationToken token)
+    /// <summary>
+    /// Tries to compress the given data to a buffer of the specified size
+    /// </summary>
+    /// <param name="bufferSize">Buffer size to initialize</param>
+    /// <param name="compression">Compression method</param>
+    /// <param name="data">Data to compress</param>
+    /// <param name="token">Cancellation token</param>
+    /// <returns>A result object, if successful, contains the buffer with the compressed data, and the size of the compressed data within it</returns>
+    /// <exception cref="InvalidOperationException">If trying to compress with <see cref="CompressionOption.None"/></exception>
+    /// <exception cref="InvalidEnumArgumentException">For invalid values of <see cref="CompressionOption"/></exception>
+    internal static async Task<Result<(PooledArray<byte> buffer, int written)>> TryCompressWithStream(int bufferSize, CompressionOption compression, ReadOnlyMemory<byte> data, CancellationToken token)
     {
         PooledArray<byte> buffer = new(bufferSize);
         try
@@ -449,7 +459,18 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         }
     }
 
-    private static async Task<Result<PooledArray<byte>>> TryDecompressWithStream(int bufferSize, CompressionOption compression, PooledArray<byte> data, int dataLength, CancellationToken token)
+    /// <summary>
+    /// Tries to decompress the given data to a buffer of the specified size
+    /// </summary>
+    /// <param name="bufferSize">Buffer size to initialize</param>
+    /// <param name="compression">Compression method</param>
+    /// <param name="data">Data to decompress</param>
+    /// <param name="dataLength">Length of the data in the buffer</param>
+    /// <param name="token">Cancellation token</param>
+    /// <returns>A result object, if successful, contains the buffer with the decompressed data</returns>
+    /// <exception cref="InvalidOperationException">If trying to compress with <see cref="CompressionOption.None"/></exception>
+    /// <exception cref="InvalidEnumArgumentException">For invalid values of <see cref="CompressionOption"/></exception>
+    internal static async Task<Result<PooledArray<byte>>> TryDecompressWithStream(int bufferSize, CompressionOption compression, PooledArray<byte> data, int dataLength, CancellationToken token)
     {
         PooledArray<byte> buffer = new(bufferSize);
         try
@@ -486,7 +507,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <param name="data">File data to save</param>
     /// <param name="path">Save file path</param>
     /// <param name="token">Cancellation token</param>
-    private static async Task SaveData(ReadOnlyMemory<byte> data, string path, CancellationToken token)
+    internal static async Task SaveData(ReadOnlyMemory<byte> data, string path, CancellationToken token)
     {
         // If file already exists at location, delete it
         if (File.Exists(path))

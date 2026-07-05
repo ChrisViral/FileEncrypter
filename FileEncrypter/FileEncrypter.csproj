@@ -37,4 +37,7 @@
 			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</Content>
 	</ItemGroup>
+	<ItemGroup>
+		<InternalsVisibleTo Include="FileEncrypter.Tests" />
+	</ItemGroup>
 </Project>

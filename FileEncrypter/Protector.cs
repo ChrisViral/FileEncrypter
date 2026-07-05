@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Numerics;
@@ -202,15 +203,17 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     private async Task<Result> EncryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
     {
         // Compress and then encrypt
-        using PooledArray<byte> compressed = await CompressData(data.AsSpan, this.options.Compression, out int compressedSize, token).ConfigureAwait(false);
-        Result<(PooledArray<byte>, int)> protectResult = await ProtectData(compressed.AsMemory[..compressedSize], token).ConfigureAwait(false);
-        if (protectResult.IsFailure) return protectResult.ConvertFailure();
-
-        (PooledArray<byte> encrypted, int encryptedSize) = protectResult.Value;
-        using (encrypted)
+        (PooledArray<byte> compressed, int compressedSize) = await CompressData(data.AsMemory, token).ConfigureAwait(false);
+        using (compressed)
         {
-            // Save encrypted file to disk
-            await SaveData(encrypted.AsMemory[..encryptedSize], file.FullName + this.options.EncryptedExtension, token).ConfigureAwait(false);
+            Result<(PooledArray<byte>, int)> protectResult = await ProtectData(compressed.AsMemory[..compressedSize], token).ConfigureAwait(false);
+            if (protectResult.IsFailure) return protectResult.ConvertFailure();
+            (PooledArray<byte> encrypted, int encryptedSize) = protectResult.Value;
+            using (encrypted)
+            {
+                // Save encrypted file to disk
+                await SaveData(encrypted.AsMemory[..encryptedSize], file.FullName + this.options.EncryptedExtension, token).ConfigureAwait(false);
+            }
         }
 
         // Delete old file if needed
@@ -240,8 +243,11 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         {
             // Decompress file before saving
             string path = Path.ChangeExtension(file.FullName, null);
-            using PooledArray<byte> decompressed = await DecompressData(decrypted[..decryptedSize], out int decompressedSize, token).ConfigureAwait(false);
-            await SaveData(decompressed.AsMemory[..decompressedSize], path, token).ConfigureAwait(false);
+            (PooledArray<byte> decompressed, int decompressedSize) = await DecompressData(decrypted, decryptedSize, token).ConfigureAwait(false);
+            using (decompressed)
+            {
+                await SaveData(decompressed.AsMemory[..decompressedSize], path, token).ConfigureAwait(false);
+            }
         }
 
         // Delete old file if needed
@@ -314,7 +320,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             try
             {
                 // Try encryption file
-                if (ProtectedData.TryProtect(data.Span, this.options.Scope, buffer[1..], out int encryptedSize, this.options.Password))
+                if (ProtectedData.TryProtect(data.Span, this.options.Scope, buffer.AsSpan, out int encryptedSize, this.options.Password))
                 {
                     return ValueTask.FromResult(Result.Success((buffer, encryptedSize)));
                 }
@@ -340,93 +346,138 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// Compresses the given file data
     /// </summary>
     /// <param name="data">Data to compress</param>
-    /// <param name="compression">The file compression type</param>
-    /// <param name="compressedSize">The compressed data size output</param>
     /// <param name="token">Cancellation token</param>
-    /// <returns>The compressed data output</returns>
+    /// <returns>A tuple containing the compressed data output, and the compressed data output size</returns>
+    /// <exception cref="InvalidEnumArgumentException">If the compression option is not a valid value</exception>
     /// <exception cref="InvalidOperationException">If the data could not be compressed</exception>
-    private static ValueTask<PooledArray<byte>> CompressData(ReadOnlySpan<byte> data, CompressionOption compression, out int compressedSize, CancellationToken token)
+    private async Task<(PooledArray<byte> compressed, int compressedSize)> CompressData(ReadOnlyMemory<byte> data, CancellationToken token)
     {
-        // Check for cancellation
-        if (token.IsCancellationRequested)
+        PooledArray<byte> compressed;
+        if (this.options.Compression is CompressionOption.None)
         {
-            compressedSize = 0;
-            return ValueTask.FromCanceled<PooledArray<byte>>(token);
+            compressed = new PooledArray<byte>(data.Length + NONCOMPRESSED_HEADER_SIZE);
+            data.CopyTo(compressed.AsMemory[NONCOMPRESSED_HEADER_SIZE..]);
+            compressed[0] = (byte)this.options.Compression;
+            return (compressed, compressed.Length);
         }
 
-        PooledArray<byte> compressed;
-        if (compression is CompressionOption.None)
+        // Get starting buffer size
+        uint bufferSize = this.options.Compression is CompressionOption.Brotli
+                              ? (uint)BrotliEncoder.GetMaxCompressedLength(data.Length)
+                              : (uint)(data.Length * 1.2f);
+        bufferSize = (bufferSize + COMPRESSED_HEADER_SIZE + 1) / 2U;
+        do
         {
-            compressedSize = data.Length;
-            compressed = new PooledArray<byte>(data.Length + NONCOMPRESSED_HEADER_SIZE);
-            data.CopyTo(compressed[NONCOMPRESSED_HEADER_SIZE..]);
-        }
-        else
-        {
-            // Get max compressed size buffer
-            compressed = new PooledArray<byte>(BrotliEncoder.GetMaxCompressedLength(data.Length) + COMPRESSED_HEADER_SIZE);
+            // Increase buffer size
+            bufferSize = Math.Min(bufferSize * 2U, int.MaxValue);
 
             // Compress file
-            if (!BrotliEncoder.TryCompress(data, compressed.AsSpan[COMPRESSED_HEADER_SIZE..], out compressedSize))
+            Result<(PooledArray<byte>, int)> compressionResult = await TryCompressWithStream((int)bufferSize, this.options.Compression, data, token).ConfigureAwait(false);
+            if (compressionResult.IsSuccess)
             {
-                // In case of error, dispose buffer
-                compressed.Dispose();
-                compressedSize = 0;
-                return ValueTask.FromException<PooledArray<byte>>(new InvalidOperationException("Could not decompress data correctly"));
+                (compressed, int compressedSize) = compressionResult.Value;
+                compressedSize += COMPRESSED_HEADER_SIZE;
+                compressed[0] = (byte)this.options.Compression;
+                BinaryPrimitives.WriteInt32LittleEndian(compressed[sizeof(byte)..], data.Length);
+                return (compressed, compressedSize);
             }
-
-            // Write original file size to header
-            compressedSize += sizeof(int);
-            BinaryPrimitives.WriteInt32LittleEndian(compressed[sizeof(byte)..], data.Length);
         }
+        while (bufferSize < int.MaxValue);
 
-
-        compressed[0] = (byte)compression;
-        return ValueTask.FromResult(compressed);
+        // In case of error, dispose buffer
+        throw new InvalidOperationException("Could not compress data correctly");
     }
 
     /// <summary>
     /// Decompresses the given file data
     /// </summary>
     /// <param name="data">Data to decompress</param>
-    /// <param name="decompressedSize">The decompressed data size output</param>
+    /// <param name="dataLength">The length of the data to decompress</param>
     /// <param name="token">Cancellation token</param>
-    /// <returns>The decompressed data output</returns>
+    /// <returns>A tuple containing the decompressed data output, and the decompressed data output size</returns>
+    /// <exception cref="InvalidEnumArgumentException">If the compression option is not a valid value</exception>
     /// <exception cref="InvalidOperationException">If the data could not be decompressed</exception>
-    private static ValueTask<PooledArray<byte>> DecompressData(ReadOnlySpan<byte> data, out int decompressedSize, CancellationToken token)
+    private async Task<(PooledArray<byte> decompressed, int decompressedSize)> DecompressData(PooledArray<byte> data, int dataLength, CancellationToken token)
     {
-        // Check for cancellation
-        if (token.IsCancellationRequested)
-        {
-            decompressedSize = 0;
-            return ValueTask.FromCanceled<PooledArray<byte>>(token);
-        }
-
-        PooledArray<byte> decompressed;
+        int decompressedSize;
         CompressionOption compression = (CompressionOption)data[0];
         if (compression is CompressionOption.None)
         {
-            decompressedSize = data.Length - NONCOMPRESSED_HEADER_SIZE;
-            decompressed = new PooledArray<byte>(decompressedSize);
-            data[NONCOMPRESSED_HEADER_SIZE..].CopyTo(decompressed.AsSpan);
+            decompressedSize = dataLength - NONCOMPRESSED_HEADER_SIZE;
+            PooledArray<byte> decompressed = new(decompressedSize);
+            data.AsSpan.Slice(NONCOMPRESSED_HEADER_SIZE, decompressedSize).CopyTo(decompressed.AsSpan);
+            return (decompressed, decompressedSize);
         }
-        else
+
+        // Get decompressed size from file header
+        decompressedSize = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan.Slice(sizeof(byte), sizeof(int)));
+
+        // Decompress file
+        Result<PooledArray<byte>> decompressionResult = await TryDecompressWithStream(decompressedSize, compression, data, dataLength, token).ConfigureAwait(false);
+        return decompressionResult.IsSuccess ? (decompressionResult.Value, decompressedSize) : throw new InvalidOperationException("Could not decompress data correctly");
+    }
+
+    private static async Task<Result<(PooledArray<byte> buffer, int written)>> TryCompressWithStream(int bufferSize, CompressionOption compression, ReadOnlyMemory<byte> data, CancellationToken token)
+    {
+        PooledArray<byte> buffer = new(bufferSize);
+        try
         {
-            // Get decompressed size from file header, and make buffer of that size
-            decompressedSize = BinaryPrimitives.ReadInt32LittleEndian(data[sizeof(byte)..sizeof(int)]);
-            decompressed = new PooledArray<byte>(decompressedSize);
-
-            // Decompress file
-            if (!BrotliDecoder.TryDecompress(data[COMPRESSED_HEADER_SIZE..], decompressed.AsSpan, out int written) || written != decompressedSize)
+            using MemoryStream memoryStream = new(buffer.AsRawArray, COMPRESSED_HEADER_SIZE, bufferSize - COMPRESSED_HEADER_SIZE, true);
+            await using Stream compressionStream = compression switch
             {
-                // In case of error, dispose buffer
-                decompressed.Dispose();
-                decompressedSize = 0;
-                return ValueTask.FromException<PooledArray<byte>>(new InvalidOperationException("Could not decompress data correctly"));
-            }
-        }
+                CompressionOption.Brotli  => new BrotliStream(memoryStream, CompressionLevel.SmallestSize),
+                CompressionOption.Deflate => new DeflateStream(memoryStream, CompressionLevel.SmallestSize),
+                CompressionOption.GZip    => new GZipStream(memoryStream, CompressionLevel.SmallestSize),
+                CompressionOption.ZLib    => new ZLibStream(memoryStream, CompressionLevel.SmallestSize),
+                CompressionOption.None    => throw new InvalidOperationException("No compression stream for None compression"),
+                _                         => throw new InvalidEnumArgumentException(nameof(compression), (int)compression, typeof(CompressionOption)),
+            };
 
-        return ValueTask.FromResult(decompressed);
+            await compressionStream.WriteAsync(data, token).ConfigureAwait(false);
+            await compressionStream.FlushAsync(token).ConfigureAwait(false);
+            return Result.Success((buffer, (int)memoryStream.Position));
+        }
+        catch (Exception e) when (e is InvalidOperationException or InvalidEnumArgumentException)
+        {
+            buffer.Dispose();
+            throw;
+        }
+        catch
+        {
+            buffer.Dispose();
+            return Result.Failure<(PooledArray<byte>, int)>("Failed to write to buffer");
+        }
+    }
+
+    private static async Task<Result<PooledArray<byte>>> TryDecompressWithStream(int bufferSize, CompressionOption compression, PooledArray<byte> data, int dataLength, CancellationToken token)
+    {
+        PooledArray<byte> buffer = new(bufferSize);
+        try
+        {
+            using MemoryStream memoryStream = new(data.AsRawArray, COMPRESSED_HEADER_SIZE, dataLength - COMPRESSED_HEADER_SIZE, false);
+            await using Stream decompressionStream = compression switch
+            {
+                CompressionOption.Brotli  => new BrotliStream(memoryStream, CompressionMode.Decompress),
+                CompressionOption.Deflate => new DeflateStream(memoryStream, CompressionMode.Decompress),
+                CompressionOption.GZip    => new GZipStream(memoryStream, CompressionMode.Decompress),
+                CompressionOption.ZLib    => new ZLibStream(memoryStream, CompressionMode.Decompress),
+                CompressionOption.None    => throw new InvalidOperationException("No compression stream for None compression"),
+                _                         => throw new InvalidEnumArgumentException(nameof(compression), (int)compression, typeof(CompressionOption)),
+            };
+
+            await decompressionStream.ReadExactlyAsync(buffer.AsMemory, token).ConfigureAwait(false);
+            return Result.Success(buffer);
+        }
+        catch (Exception e) when (e is InvalidOperationException or InvalidEnumArgumentException)
+        {
+            buffer.Dispose();
+            throw;
+        }
+        catch
+        {
+            buffer.Dispose();
+            return Result.Failure<PooledArray<byte>>("Failed to write to buffer");
+        }
     }
 
     /// <summary>

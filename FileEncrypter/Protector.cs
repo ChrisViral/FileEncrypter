@@ -1,10 +1,13 @@
-using System;
+﻿using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Numerics;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using CSharpFunctionalExtensions;
 using JetBrains.Annotations;
@@ -18,35 +21,25 @@ namespace FileEncrypter;
 /// <param name="logger">Logger instance</param>
 /// <param name="options">Protection options</param>
 [PublicAPI]
-public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOptions options) : IDisposable
+public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOptions options)
 {
-    private CancellationTokenSource source = new();
+    /// <summary>
+    /// Parallel loop state
+    /// </summary>
+    private sealed class State
+    {
+        /// <summary>
+        /// Failure count
+        /// </summary>
+        public int failures;
+    }
+
     private readonly ProtectionOptions options = options;
 
     /// <summary>
     /// Logger instance
     /// </summary>
     private ILogger Logger { get; } = logger;
-
-    /// <inheritdoc/>
-    public void Dispose() => this.source.Dispose();
-
-    /// <summary>
-    /// Resets the token sour if used up and starts the cancellation timer if needed
-    /// </summary>
-    private void RestartTokenSource()
-    {
-        if (this.source.IsCancellationRequested)
-        {
-            this.source.Dispose();
-            this.source = new CancellationTokenSource();
-        }
-
-        if (this.options.FileTimeout > 0)
-        {
-            this.source.CancelAfter(this.options.FileTimeout);
-        }
-    }
 
     /// <summary>
     /// Protects all files and folders given
@@ -55,37 +48,13 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <returns>True if no errors occured, otherwise false</returns>
     public async Task<Result> ProtectAll(ReadOnlyMemory<FileSystemInfo> targets)
     {
-        int failures = 0;
-        for (int i = 0; i < targets.Length; i++)
-        {
-            FileSystemInfo target = targets.Span[i];
-            Result result;
-            switch (target)
-            {
-                case FileInfo file:
-                    // Compress files immediately
-                    RestartTokenSource();
-                    result = await ProtectFile(file, this.source.Token).ConfigureAwait(false);
-                    this.source.TryReset();
-                    break;
-
-                case DirectoryInfo directory:
-                    // Compress all files in folder
-                    result = await ProtectDirectory(directory).ConfigureAwait(false);
-                    break;
-
-                default:
-                    LogUnidentifiedFilesysteminfoObjectTypenameTarget(this.Logger, target.GetType().FullName!, target);
-                    result = Result.Failure("Unknown filesystem type");
-                    break;
-            }
-
-            if (result.IsFailure)
-            {
-                failures++;
-            }
-        }
-        return Result.SuccessIf(failures is 0, $"{failures} failures while protecting data");
+        State state = new();
+        using CancellationTokenSource source = new();
+        await Parallel.ForEachAsync(GetFilesToProtect(targets).Select(f => (f, state)),
+                                    source.Token,
+                                    ProtectFileParallel)
+                      .ConfigureAwait(false);
+        return Result.SuccessIf(state.failures is 0, $"{state.failures} failures while protecting data");
     }
 
     /// <summary>
@@ -95,20 +64,14 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <returns>True if no errors occured, otherwise false</returns>
     public async Task<Result> ProtectDirectory(DirectoryInfo directory)
     {
-        // Enumerate and compress all files
-
-        int failures = 0;
-        foreach (FileInfo file in directory.EnumerateFiles(this.options.SearchPattern, this.options.SearchOption))
-        {
-            RestartTokenSource();
-            Result result = await ProtectFile(file, this.source.Token).ConfigureAwait(false);
-            this.source.TryReset();
-            if (result.IsFailure)
-            {
-                failures++;
-            }
-        }
-        return Result.SuccessIf(failures is 0, $"{failures} failures while protecting directory contents");
+        State state = new();
+        using CancellationTokenSource source = new();
+        await Parallel.ForEachAsync(directory.EnumerateFiles(this.options.SearchPattern, this.options.SearchOption)
+                                             .Select(f => (f, state)),
+                                    source.Token,
+                                    ProtectFileParallel)
+                      .ConfigureAwait(false);
+        return Result.SuccessIf(state.failures is 0, $"{state.failures} failures while protecting folder");
     }
 
     /// <summary>
@@ -117,9 +80,8 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <param name="file">File to protect</param>
     /// <param name="token">Cancellation token</param>
     /// <returns>True if no errors occured, otherwise false</returns>
-    public async Task<Result> ProtectFile(FileInfo file, CancellationToken token)
+    private async Task<Result> ProtectFile(FileInfo file, CancellationToken token)
     {
-        // Check if file can be decrypted
         if (file.Extension == this.options.EncryptedExtension && !this.options.ValidModes.HasFlagFast(ProtectionModes.Decrypt))
         {
             LogDecryptionNotEnabledIgnoringFileFilename(this.Logger, file.FullName);
@@ -162,6 +124,74 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             //Log any exceptions
             LogErrorHappenedForFileFilename(this.Logger, file.FullName, e);
             return Result.Failure("Exception thrown during protection");
+        }
+    }
+
+    /// <summary>
+    /// Enumeratres files to protect from a list of FileSystemInfo targets
+    /// </summary>
+    /// <param name="targets">FileSystemInfo targets to enumerate from</param>
+    /// <returns></returns>
+    private IEnumerable<FileInfo?> GetFilesToProtect(ReadOnlyMemory<FileSystemInfo> targets)
+    {
+        for (int i = 0; i < targets.Length; i++)
+        {
+            FileSystemInfo target = targets.Span[i];
+            switch (target)
+            {
+                case FileInfo file:
+                    // Compress files immediately
+                    yield return file;
+                    break;
+
+                case DirectoryInfo directory:
+                    // Compress all files in folder
+                    foreach (FileInfo file in directory.EnumerateFiles(this.options.SearchPattern, this.options.SearchOption))
+                    {
+                        yield return file;
+                    }
+                    break;
+
+                default:
+                    LogUnidentifiedFilesysteminfoObjectTypenameTarget(this.Logger, target.GetType().FullName!, target);
+                    yield return null;
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Protects a given file from a parallel loop
+    /// </summary>
+    /// <param name="fileData">Tuple containing the file to protect and the parallel loop state</param>
+    /// <param name="token">Cancellation token</param>
+    private async ValueTask ProtectFileParallel((FileInfo?, State) fileData, CancellationToken token)
+    {
+        // Check cancellation
+        token.ThrowIfCancellationRequested();
+
+        // Make sure file isn't null
+        (FileInfo? file, State state) = fileData;
+        if (file is null)
+        {
+            Interlocked.Increment(ref state.failures);
+            return;
+        }
+
+        // Setup timeout source and link to original token
+        using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(token);
+        if (this.options.FileTimeout > 0)
+        {
+            timeoutSource.CancelAfter(this.options.FileTimeout);
+        }
+
+        // Protect file
+        Result result = await ProtectFile(file, timeoutSource.Token).ConfigureAwait(false);
+
+        // Check for failure
+        if (result.IsFailure)
+        {
+            Interlocked.Increment(ref state.failures);
         }
     }
 

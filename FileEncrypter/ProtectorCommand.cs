@@ -1,5 +1,7 @@
-﻿using System.Security.Cryptography;
+using System.IO;
+using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 using CSharpFunctionalExtensions;
 using DotMake.CommandLine;
 using Microsoft.Extensions.Logging;

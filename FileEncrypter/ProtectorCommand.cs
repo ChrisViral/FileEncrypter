@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using CSharpFunctionalExtensions;
 using DotMake.CommandLine;
@@ -88,7 +88,7 @@ public sealed class ProtectorCommand(ILogger<Protector> logger) : ICliRunAsyncWi
     {
         byte[]? passwordBytes = !string.IsNullOrEmpty(this.Password) ? Encoding.UTF8.GetBytes(this.Password) : null;
         ProtectionOptions options = new(passwordBytes, this.EncryptedExtension, this.Modes, this.SearchPattern, this.SearchOption, this.Scope, !this.NoCompression, !this.KeepFiles, this.Timeout);
-        using Protector protector = new(logger, options);
+        Protector protector = new(logger, options);
         Result result = await protector.ProtectAll(this.Targets).ConfigureAwait(false);
         return result.Match(() => 0, _ => 1);
     }

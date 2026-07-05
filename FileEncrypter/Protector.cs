@@ -28,6 +28,9 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         public int failures;
     }
 
+    private const int NONCOMPRESSED_HEADER_SIZE = sizeof(byte);
+    private const int COMPRESSED_HEADER_SIZE = sizeof(byte) + sizeof(int);
+
     private readonly ProtectionOptions options = options;
 
     /// <summary>
@@ -198,19 +201,9 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     /// <returns>True if no errors occured, otherwise false</returns>
     private async Task<Result> EncryptFile(FileInfo file, PooledArray<byte> data, CancellationToken token)
     {
-        Result<(PooledArray<byte>, int)> protectResult;
-        if (this.options.Compress)
-        {
-            // Compress file data before encryption
-            using PooledArray<byte> compressed = await CompressData(data.AsSpan, out int compressedSize, token).ConfigureAwait(false);
-            protectResult = await ProtectData(compressed.AsMemory[..compressedSize], token).ConfigureAwait(false);
-        }
-        else
-        {
-            // Simply encrypt file
-            protectResult = await ProtectData(data.AsMemory, token).ConfigureAwait(false);
-        }
-
+        // Compress and then encrypt
+        using PooledArray<byte> compressed = await CompressData(data.AsSpan, this.options.Compression, out int compressedSize, token).ConfigureAwait(false);
+        Result<(PooledArray<byte>, int)> protectResult = await ProtectData(compressed.AsMemory[..compressedSize], token).ConfigureAwait(false);
         if (protectResult.IsFailure) return protectResult.ConvertFailure();
 
         (PooledArray<byte> encrypted, int encryptedSize) = protectResult.Value;
@@ -245,19 +238,10 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
         (PooledArray<byte> decrypted, int decryptedSize) = unprotectResult.Value;
         using (decrypted)
         {
-            ReadOnlyMemory<byte> decryptedMemory = decrypted.AsMemory[..decryptedSize];
+            // Decompress file before saving
             string path = Path.ChangeExtension(file.FullName, null);
-            if (this.options.Compress)
-            {
-                // Decompress file before saving
-                using PooledArray<byte> decompressed = await DecompressData(decryptedMemory.Span, out int decompressedSize, token).ConfigureAwait(false);
-                await SaveData(decompressed.AsMemory[..decompressedSize], path, token).ConfigureAwait(false);
-            }
-            else
-            {
-                // Simply save decrypted file
-                await SaveData(decryptedMemory, path, token).ConfigureAwait(false);
-            }
+            using PooledArray<byte> decompressed = await DecompressData(decrypted[..decryptedSize], out int decompressedSize, token).ConfigureAwait(false);
+            await SaveData(decompressed.AsMemory[..decompressedSize], path, token).ConfigureAwait(false);
         }
 
         // Delete old file if needed
@@ -330,7 +314,7 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             try
             {
                 // Try encryption file
-                if (ProtectedData.TryProtect(data.Span, this.options.Scope, buffer.AsSpan, out int encryptedSize, this.options.Password))
+                if (ProtectedData.TryProtect(data.Span, this.options.Scope, buffer[1..], out int encryptedSize, this.options.Password))
                 {
                     return ValueTask.FromResult(Result.Success((buffer, encryptedSize)));
                 }
@@ -353,6 +337,55 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
     }
 
     /// <summary>
+    /// Compresses the given file data
+    /// </summary>
+    /// <param name="data">Data to compress</param>
+    /// <param name="compression">The file compression type</param>
+    /// <param name="compressedSize">The compressed data size output</param>
+    /// <param name="token">Cancellation token</param>
+    /// <returns>The compressed data output</returns>
+    /// <exception cref="InvalidOperationException">If the data could not be compressed</exception>
+    private static ValueTask<PooledArray<byte>> CompressData(ReadOnlySpan<byte> data, CompressionOption compression, out int compressedSize, CancellationToken token)
+    {
+        // Check for cancellation
+        if (token.IsCancellationRequested)
+        {
+            compressedSize = 0;
+            return ValueTask.FromCanceled<PooledArray<byte>>(token);
+        }
+
+        PooledArray<byte> compressed;
+        if (compression is CompressionOption.None)
+        {
+            compressedSize = data.Length;
+            compressed = new PooledArray<byte>(data.Length + NONCOMPRESSED_HEADER_SIZE);
+            data.CopyTo(compressed[NONCOMPRESSED_HEADER_SIZE..]);
+        }
+        else
+        {
+            // Get max compressed size buffer
+            compressed = new PooledArray<byte>(BrotliEncoder.GetMaxCompressedLength(data.Length) + COMPRESSED_HEADER_SIZE);
+
+            // Compress file
+            if (!BrotliEncoder.TryCompress(data, compressed.AsSpan[COMPRESSED_HEADER_SIZE..], out compressedSize))
+            {
+                // In case of error, dispose buffer
+                compressed.Dispose();
+                compressedSize = 0;
+                return ValueTask.FromException<PooledArray<byte>>(new InvalidOperationException("Could not decompress data correctly"));
+            }
+
+            // Write original file size to header
+            compressedSize += sizeof(int);
+            BinaryPrimitives.WriteInt32LittleEndian(compressed[sizeof(byte)..], data.Length);
+        }
+
+
+        compressed[0] = (byte)compression;
+        return ValueTask.FromResult(compressed);
+    }
+
+    /// <summary>
     /// Decompresses the given file data
     /// </summary>
     /// <param name="data">Data to decompress</param>
@@ -369,55 +402,31 @@ public sealed partial class Protector(ILogger<Protector> logger, in ProtectionOp
             return ValueTask.FromCanceled<PooledArray<byte>>(token);
         }
 
-        // Get decompressed size from file header, and make buffer of that size
-        decompressedSize = BinaryPrimitives.ReadInt32LittleEndian(data);
-        PooledArray<byte> decompressed = new(decompressedSize);
-
-        // Decompress file
-        if (!BrotliDecoder.TryDecompress(data[sizeof(int)..], decompressed.AsSpan, out int written) || written != decompressedSize)
+        PooledArray<byte> decompressed;
+        CompressionOption compression = (CompressionOption)data[0];
+        if (compression is CompressionOption.None)
         {
-            // In case of error, dispose buffer
-            decompressed.Dispose();
-            decompressedSize = 0;
-            return ValueTask.FromException<PooledArray<byte>>(new InvalidOperationException("Could not decompress data correctly"));
+            decompressedSize = data.Length - NONCOMPRESSED_HEADER_SIZE;
+            decompressed = new PooledArray<byte>(decompressedSize);
+            data[NONCOMPRESSED_HEADER_SIZE..].CopyTo(decompressed.AsSpan);
+        }
+        else
+        {
+            // Get decompressed size from file header, and make buffer of that size
+            decompressedSize = BinaryPrimitives.ReadInt32LittleEndian(data[sizeof(byte)..sizeof(int)]);
+            decompressed = new PooledArray<byte>(decompressedSize);
+
+            // Decompress file
+            if (!BrotliDecoder.TryDecompress(data[COMPRESSED_HEADER_SIZE..], decompressed.AsSpan, out int written) || written != decompressedSize)
+            {
+                // In case of error, dispose buffer
+                decompressed.Dispose();
+                decompressedSize = 0;
+                return ValueTask.FromException<PooledArray<byte>>(new InvalidOperationException("Could not decompress data correctly"));
+            }
         }
 
         return ValueTask.FromResult(decompressed);
-    }
-
-    /// <summary>
-    /// Compresses the given file data
-    /// </summary>
-    /// <param name="data">Data to compress</param>
-    /// <param name="compressedSize">The compressed data size output</param>
-    /// <param name="token">Cancellation token</param>
-    /// <returns>The compressed data output</returns>
-    /// <exception cref="InvalidOperationException">If the data could not be compressed</exception>
-    private static ValueTask<PooledArray<byte>> CompressData(ReadOnlySpan<byte> data, out int compressedSize, CancellationToken token)
-    {
-        // Check for cancellation
-        if (token.IsCancellationRequested)
-        {
-            compressedSize = 0;
-            return ValueTask.FromCanceled<PooledArray<byte>>(token);
-        }
-
-        // Get max compressed size buffer
-        PooledArray<byte> compressed = new(BrotliEncoder.GetMaxCompressedLength(data.Length) + sizeof(int));
-
-        // Compress file
-        if (!BrotliEncoder.TryCompress(data, compressed.AsSpan[sizeof(int)..], out compressedSize))
-        {
-            // In case of error, dispose buffer
-            compressed.Dispose();
-            compressedSize = 0;
-            return ValueTask.FromException<PooledArray<byte>>(new InvalidOperationException("Could not decompress data correctly"));
-        }
-
-        // Write original file size to header
-        compressedSize += sizeof(int);
-        BinaryPrimitives.WriteInt32LittleEndian(compressed.AsSpan, data.Length);
-        return ValueTask.FromResult(compressed);
     }
 
     /// <summary>

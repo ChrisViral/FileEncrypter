@@ -63,11 +63,11 @@ public sealed class ProtectorCommand(ILogger<Protector> logger) : ICliRunAsyncWi
     public DataProtectionScope Scope { get; set; } = DataProtectionScope.CurrentUser;
 
     /// <summary>
-    /// If file compression before encryption should be omitted
+    /// The type of file compression to use
     /// </summary>
-    [CliOption(Description = "If file compression before encryption should be omitted",
-               Arity = CliArgumentArity.ZeroOrOne, Alias = "-nc")]
-    public bool NoCompression { get; set; }
+    [CliOption(Description = "The type of file compression to use",
+               Arity = CliArgumentArity.ZeroOrOne, Alias = "-c")]
+    public CompressionOption Compression { get; set; } = CompressionOption.Brotli;
 
     /// <summary>
     /// If old files should be kept after being processed
@@ -87,7 +87,7 @@ public sealed class ProtectorCommand(ILogger<Protector> logger) : ICliRunAsyncWi
     public async Task<int> RunAsync(CliContext cliContext)
     {
         byte[]? passwordBytes = !string.IsNullOrEmpty(this.Password) ? Encoding.UTF8.GetBytes(this.Password) : null;
-        ProtectionOptions options = new(passwordBytes, this.EncryptedExtension, this.Modes, this.SearchPattern, this.SearchOption, this.Scope, !this.NoCompression, !this.KeepFiles, this.Timeout);
+        ProtectionOptions options = new(passwordBytes, this.EncryptedExtension, this.Modes, this.SearchPattern, this.SearchOption, this.Scope, this.Compression, !this.KeepFiles, this.Timeout);
         Protector protector = new(logger, options);
         Result result = await protector.ProtectAll(this.Targets).ConfigureAwait(false);
         return result.Match(() => 0, _ => 1);

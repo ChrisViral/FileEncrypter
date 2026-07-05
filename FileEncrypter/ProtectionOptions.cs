@@ -22,4 +22,7 @@ public readonly record struct ProtectionOptions(byte[]? Password = null,
                                                 DataProtectionScope Scope = DataProtectionScope.CurrentUser,
                                                 CompressionOption Compression = CompressionOption.Brotli,
                                                 bool DeleteFiles = true,
-                                                int FileTimeout = -1);
+                                                int FileTimeout = -1)
+{
+    public ProtectionOptions() : this(null) { }
+}

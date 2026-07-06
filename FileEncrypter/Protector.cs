@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Numerics;
 using System.Security.Cryptography;
 using CSharpFunctionalExtensions;
+using FileEncrypter.Collections;
 using JetBrains.Annotations;
 using Microsoft.Extensions.Logging;
 

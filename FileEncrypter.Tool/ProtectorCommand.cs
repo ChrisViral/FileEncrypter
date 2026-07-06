@@ -4,7 +4,7 @@ using CSharpFunctionalExtensions;
 using DotMake.CommandLine;
 using Microsoft.Extensions.Logging;
 
-namespace FileEncrypter;
+namespace FileEncrypter.Tool;
 
 /// <summary>
 /// Protects files by encrypting them with a Windows User specific key.
@@ -32,7 +32,7 @@ public sealed class ProtectorCommand(ILogger<Protector> logger) : ICliRunAsyncWi
     /// </summary>
     [CliOption(Description = "The encrypted file extension",
                Arity = CliArgumentArity.ZeroOrOne, Required = false, Alias = "-e")]
-    public string EncryptedExtension { get; set; } = ".enc";
+    public string Extension { get; set; } = ".enc";
 
     /// <summary>
     /// Type of protections to allow applying
@@ -87,7 +87,7 @@ public sealed class ProtectorCommand(ILogger<Protector> logger) : ICliRunAsyncWi
     public async Task<int> RunAsync(CliContext cliContext)
     {
         byte[]? passwordBytes = !string.IsNullOrEmpty(this.Password) ? Encoding.UTF8.GetBytes(this.Password) : null;
-        ProtectionOptions options = new(passwordBytes, this.EncryptedExtension, this.Modes, this.SearchPattern, this.SearchOption, this.Scope, this.Compression, !this.KeepFiles, this.Timeout);
+        ProtectionOptions options = new(passwordBytes, this.Extension, this.Modes, this.SearchPattern, this.SearchOption, this.Scope, this.Compression, !this.KeepFiles, this.Timeout);
         Protector protector = new(logger, options);
         Result result = await protector.ProtectAll(this.Targets).ConfigureAwait(false);
         return result.Match(() => 0, _ => 1);

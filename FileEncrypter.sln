@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29102.190
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FileEncrypter", "FileEncrypter\FileEncrypter.csproj", "{C6462DBC-6802-4509-870A-A3346A87FC79}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FileEncrypter.Tool", "FileEncrypter.Tool\FileEncrypter.Tool.csproj", "{C6462DBC-6802-4509-870A-A3346A87FC79}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{ECCE8F8E-C782-42ED-BEA1-E165123DF90F}"
 	ProjectSection(SolutionItems) = preProject
@@ -17,6 +17,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Github Actions", "Github Ac
 		.github\workflows\dotnet-build-test.yml = .github\workflows\dotnet-build-test.yml
 		.github\workflows\publish.yml = .github\workflows\publish.yml
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileEncrypter", "FileEncrypter\FileEncrypter.csproj", "{2BE1522E-BE93-4ED9-8456-79B091C87EDB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -52,6 +54,18 @@ Global
 		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Release|x64.Build.0 = Release|Any CPU
 		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Release|x86.ActiveCfg = Release|Any CPU
 		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Release|x86.Build.0 = Release|Any CPU
+		{2BE1522E-BE93-4ED9-8456-79B091C87EDB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2BE1522E-BE93-4ED9-8456-79B091C87EDB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2BE1522E-BE93-4ED9-8456-79B091C87EDB}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2BE1522E-BE93-4ED9-8456-79B091C87EDB}.Debug|x64.Build.0 = Debug|Any CPU
+		{2BE1522E-BE93-4ED9-8456-79B091C87EDB}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2BE1522E-BE93-4ED9-8456-79B091C87EDB}.Debug|x86.Build.0 = Debug|Any CPU
+		{2BE1522E-BE93-4ED9-8456-79B091C87EDB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2BE1522E-BE93-4ED9-8456-79B091C87EDB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2BE1522E-BE93-4ED9-8456-79B091C87EDB}.Release|x64.ActiveCfg = Release|Any CPU
+		{2BE1522E-BE93-4ED9-8456-79B091C87EDB}.Release|x64.Build.0 = Release|Any CPU
+		{2BE1522E-BE93-4ED9-8456-79B091C87EDB}.Release|x86.ActiveCfg = Release|Any CPU
+		{2BE1522E-BE93-4ED9-8456-79B091C87EDB}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

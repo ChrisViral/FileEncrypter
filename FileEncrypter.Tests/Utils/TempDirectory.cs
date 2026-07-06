@@ -1,4 +1,4 @@
-﻿namespace FileEncrypter.Tests;
+﻿namespace FileEncrypter.Tests.Utils;
 
 /// <summary>
 /// Temporary disposable directory utility

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using CSharpFunctionalExtensions;
+using FileEncrypter.Tests.Utils;
 
 namespace FileEncrypter.Tests;
 

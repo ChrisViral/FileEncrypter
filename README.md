@@ -37,7 +37,7 @@ dotnet tool install --global FileEncrypter.Tool
 If you prefer to use a local copy or test a development build:
 ```bash
 dotnet pack --configuration Release
-dotnet tool install --global --add-source ./bin/Release/FileEncrypter.nupkgs FileEncrypter
+dotnet tool install --global --add-source ./bin/Release/FileEncrypter.nupkgs FileEncrypter.Tool
 ```
 
 ---

@@ -34,16 +34,20 @@ jobs:
 
       - name: Update .csproj with version
         run: |
-          csproj=$(find . -name "*.csproj" | head -n 1)
+          libcsproj=$(find . -name "*/FileEncrypter.csproj" | head -n 1)
+          toolcsproj=$(find . -name "*/FileEncrypter.Tool.csproj" | head -n 1)
           version="${{ steps.get_version.outputs.VERSION }}"
-          echo "Setting version to $version in $csproj"
+          echo "Setting version to $version in $libcsproj and $toolcsproj "
 
           # Remove old version tags
-          sed -i '/<Version>.*<\/Version>/d' "$csproj"
-          sed -i '/<InformationalVersion>.*<\/InformationalVersion>/d' "$csproj"
+          sed -i '/<Version>.*<\/Version>/d' "$libcsproj"
+          sed -i '/<Version>.*<\/Version>/d' "$toolcsproj"
+          sed -i '/<InformationalVersion>.*<\/InformationalVersion>/d' "$libcsproj"
+          sed -i '/<InformationalVersion>.*<\/InformationalVersion>/d' "$toolcsproj"
 
           # Inject new version tags before </PropertyGroup>
-          sed -i "s|</PropertyGroup>|  <Version>${version}</Version>\n  <InformationalVersion>${version}</InformationalVersion>\n</PropertyGroup>|" "$csproj"
+          sed -i "s|</PropertyGroup>|  <Version>${version}</Version>\n  <InformationalVersion>${version}</InformationalVersion>\n</PropertyGroup>|" "$libcsproj"
+          sed -i "s|</PropertyGroup>|  <Version>${version}</Version>\n  <InformationalVersion>${version}</InformationalVersion>\n</PropertyGroup>|" "$toolcsproj"
 
       - name: Restore dependencies
         run: dotnet restore

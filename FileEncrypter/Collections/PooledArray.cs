@@ -29,8 +29,7 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
         set => this.AsSpan[index] = value;
     }
 
-    /// <inheritdoc cref="this(int)"/>
-    /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
+    /// <inheritdoc cref="FileEncrypter.Collections.PooledArray{T}.this[System.Int32]"/>
     public readonly T this[Index index]
     {
         get => this.AsSpan[index];
@@ -88,7 +87,7 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
     /// Gets a reference to the element at the specified zero-based index.
     /// </summary>
     /// <returns>A reference to the element at the specified index.</returns>
-    /// <inheritdoc cref="this(int)"/>
+    /// <inheritdoc cref="FileEncrypter.Collections.PooledArray{T}.this[System.Int32]"/>
     public readonly ref T GetRef(int index) => ref this.AsSpan[index];
 
     /// <inheritdoc cref="GetRef(System.Int32)"/>

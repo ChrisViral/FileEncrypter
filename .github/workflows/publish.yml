@@ -49,14 +49,14 @@ jobs:
         run: dotnet restore
 
       - name: Build
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build ./FileEncrypter.Tool/FileEncrypter.Tool.csproj --configuration Release --no-restore
 
       - name: Pack
-        run: dotnet pack --configuration Release --no-build --output ./nupkgs
+        run: dotnet pack ./FileEncrypter.Tool/FileEncrypter.Tool.csproj --configuration Release --no-build --output ./nupkgs
 
       - name: Push to GitHub Packages
         run: |
-          dotnet nuget push ./nupkgs/*.nupkg \
+          dotnet nuget push ./nupkgs/FileEncrypter.Tool*.nupkg \
             --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
             --api-key ${{ secrets.GITHUB_TOKEN }}
 

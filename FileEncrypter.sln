@@ -3,28 +3,62 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29102.190
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FileEncrypter", "FileEncrypter.csproj", "{C6462DBC-6802-4509-870A-A3346A87FC79}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FileEncrypter", "FileEncrypter\FileEncrypter.csproj", "{C6462DBC-6802-4509-870A-A3346A87FC79}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{ECCE8F8E-C782-42ED-BEA1-E165123DF90F}"
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileEncrypter.Tests", "FileEncrypter.Tests\FileEncrypter.Tests.csproj", "{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Github Actions", "Github Actions", "{060B35DD-F8E5-40E3-A3AE-63C77343AD91}"
+	ProjectSection(SolutionItems) = preProject
+		.github\workflows\dotnet-build-test.yml = .github\workflows\dotnet-build-test.yml
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
 		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{C6462DBC-6802-4509-870A-A3346A87FC79}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C6462DBC-6802-4509-870A-A3346A87FC79}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C6462DBC-6802-4509-870A-A3346A87FC79}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C6462DBC-6802-4509-870A-A3346A87FC79}.Debug|x64.Build.0 = Debug|Any CPU
+		{C6462DBC-6802-4509-870A-A3346A87FC79}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C6462DBC-6802-4509-870A-A3346A87FC79}.Debug|x86.Build.0 = Debug|Any CPU
 		{C6462DBC-6802-4509-870A-A3346A87FC79}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C6462DBC-6802-4509-870A-A3346A87FC79}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C6462DBC-6802-4509-870A-A3346A87FC79}.Release|x64.ActiveCfg = Release|Any CPU
+		{C6462DBC-6802-4509-870A-A3346A87FC79}.Release|x64.Build.0 = Release|Any CPU
+		{C6462DBC-6802-4509-870A-A3346A87FC79}.Release|x86.ActiveCfg = Release|Any CPU
+		{C6462DBC-6802-4509-870A-A3346A87FC79}.Release|x86.Build.0 = Release|Any CPU
+		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Debug|x64.Build.0 = Debug|Any CPU
+		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Debug|x86.Build.0 = Debug|Any CPU
+		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Release|x64.ActiveCfg = Release|Any CPU
+		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Release|x64.Build.0 = Release|Any CPU
+		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Release|x86.ActiveCfg = Release|Any CPU
+		{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C39E04B6-61B7-4768-A3BB-B75B996701FE}
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{060B35DD-F8E5-40E3-A3AE-63C77343AD91} = {ECCE8F8E-C782-42ED-BEA1-E165123DF90F}
 	EndGlobalSection
 EndGlobal

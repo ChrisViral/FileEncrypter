@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<assembly name="DotMake.CommandLine">
+    <member name="T:DotMake.CommandLine.CliCommandAttribute">
+        <attribute ctor="M:JetBrains.Annotations.MeansImplicitUseAttribute.#ctor(JetBrains.Annotations.ImplicitUseKindFlags)">
+            <argument>8</argument> <!-- ImplicitUseKindFlags.InstantiatedNoFixedConstructorSignature -->
+        </attribute>
+    </member>
+    <member name="T:DotMake.CommandLine.CliArgumentAttribute">
+        <attribute ctor="M:JetBrains.Annotations.MeansImplicitUseAttribute.#ctor(JetBrains.Annotations.ImplicitUseKindFlags)">
+            <argument>2</argument> <!-- ImplicitUseKindFlags.Assign -->
+        </attribute>
+    </member>
+    <member name="T:DotMake.CommandLine.CliOptionAttribute">
+        <attribute ctor="M:JetBrains.Annotations.MeansImplicitUseAttribute.#ctor(JetBrains.Annotations.ImplicitUseKindFlags)">
+            <argument>2</argument> <!-- ImplicitUseKindFlags.Assign -->
+        </attribute>
+    </member>
+</assembly>

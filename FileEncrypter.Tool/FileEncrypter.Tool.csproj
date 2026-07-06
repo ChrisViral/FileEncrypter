@@ -22,6 +22,8 @@
         <PackAsTool>true</PackAsTool>
         <ToolCommandName>fencrypt</ToolCommandName>
         <RepositoryType>git</RepositoryType>
+        <SignAssembly>true</SignAssembly>
+        <AssemblyOriginatorKeyFile>Properties\FileEncrypter.Tool.snk</AssemblyOriginatorKeyFile>
     </PropertyGroup>
 
     <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">

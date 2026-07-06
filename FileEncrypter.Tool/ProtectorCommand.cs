@@ -31,7 +31,9 @@ public sealed class ProtectorCommand(ILogger<Protector> logger) : ICliRunAsyncWi
     /// The encrypted file extension
     /// </summary>
     [CliOption(Description = "The encrypted file extension",
-               Arity = CliArgumentArity.ZeroOrOne, Required = false, Alias = "-e")]
+               Arity = CliArgumentArity.ZeroOrOne, Required = false, Alias = "-e",
+               ValidationPattern = @"\..+", ValidationRules = CliValidationRules.LegalPath,
+               ValidationMessage = "Extension must be a path-legal string starting with a period")]
     public string Extension { get; set; } = ".enc";
 
     /// <summary>

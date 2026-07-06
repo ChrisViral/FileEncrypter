@@ -29,7 +29,4 @@ jobs:
 
       - name: Run unit tests
         run: |
-          dotnet test FileEncrypter.Tests/FileEncrypter.Tests.csproj \
-            --configuration Release \
-            --verbosity normal \
-            --no-build   # build already done above
+          dotnet test --configuration Release --verbosity detailed --no-build --no-restore

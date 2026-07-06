@@ -30,7 +30,7 @@ You can install the tool globally via the NuGet registry or locally from a built
 
 ### Global install (NuGet)
 ```bash
-dotnet tool install --global FileEncrypter
+dotnet tool install --global FileEncrypter.Tool
 ```
 
 ### Local install (built package)

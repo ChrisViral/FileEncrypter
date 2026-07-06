@@ -12,6 +12,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileEncrypter.Tests", "FileEncrypter.Tests\FileEncrypter.Tests.csproj", "{E8C11E7A-C813-4264-AC84-FCA4AEB226E8}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Github Actions", "Github Actions", "{060B35DD-F8E5-40E3-A3AE-63C77343AD91}"
+	ProjectSection(SolutionItems) = preProject
+		.github\workflows\dotnet-build-test.yml = .github\workflows\dotnet-build-test.yml
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -52,5 +57,8 @@ Global
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C39E04B6-61B7-4768-A3BB-B75B996701FE}
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{060B35DD-F8E5-40E3-A3AE-63C77343AD91} = {ECCE8F8E-C782-42ED-BEA1-E165123DF90F}
 	EndGlobalSection
 EndGlobal

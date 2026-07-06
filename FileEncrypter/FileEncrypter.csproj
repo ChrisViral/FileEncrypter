@@ -15,6 +15,14 @@
     <DocumentationFile>bin\Release\FileEncrypter.xml</DocumentationFile>
   </PropertyGroup>
 
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <NoWarn>1701;1702</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CS8002</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="CSharpFunctionalExtensions" Version="3.7.0" />
     <PackageReference Include="CSharpFunctionalExtensions.Analyzers" Version="1.4.1">
@@ -27,8 +35,8 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.9" />
   </ItemGroup>
 
-    <ItemGroup>
-        <InternalsVisibleTo Include="FileEncrypter.Tests" />
-    </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FileEncrypter.Tests, PublicKey=002400000480000014010000060200000024000052534131000800000100010011b7ce4efd7c0962aa2e203bb37f6ce4d4d4c715e9a1f854971b6a4cbf266b38d997c598b6be44683fe2a754968a60cf1400c6ad6b8de14959e26864830fd0f08dba4558c12d55b3c6b93d2dbc06965afe404e9f82c41afd897585ccd6bb7b1856a240039d30ecadfc7bf5646768750deb41505a92cc8bf2a911265f172db5ed4756d8639475eeb01321fe3b58947506461f5e657a373f2c57760dd45537d19036ff6d7dfd4b98f2fb4208c01979307ee8bc13852450ae225133495a824caf1753bc633612a91730f337397e490539b7630c35c18cb843fc81fb81ef4d7a948e0a4389f09a39edf311236be0087641a6ebb853628484ea2a32dcfe586d659894" />
+  </ItemGroup>
 
 </Project>

@@ -8,12 +8,19 @@ namespace FileEncrypter;
 [Flags, PublicAPI]
 public enum ProtectionModes
 {
+    /// <summary>No encryption or decryption allowed</summary>
     None    = 0b00,
+    /// <summary>Only encryption allowed</summary>
     Encrypt = 0b01,
+    /// <summary>Only decryption allowed</summary>
     Decrypt = 0b10,
+    /// <summary>Both encryption and decryption allowed</summary>
     All     = 0b11
 }
 
+/// <summary>
+/// ProtectionModes extensions
+/// </summary>
 public static class ProtectionModesExtensions
 {
     /// <summary>

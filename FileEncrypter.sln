@@ -15,6 +15,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Github Actions", "Github Actions", "{060B35DD-F8E5-40E3-A3AE-63C77343AD91}"
 	ProjectSection(SolutionItems) = preProject
 		.github\workflows\dotnet-build-test.yml = .github\workflows\dotnet-build-test.yml
+		.github\workflows\publish.yml = .github\workflows\publish.yml
 	EndProjectSection
 EndProject
 Global

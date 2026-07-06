@@ -6,6 +6,13 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to publish
+        required: true
+        type: string
+
 
 jobs:
   publish:
@@ -23,19 +30,34 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v5
         env:
-          NUGET_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           dotnet-version: '10.0.x'
           source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
 
+      - name: Verify tag exists
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git fetch --tags
+          git rev-parse "refs/tags/${{ inputs.tag }}" >/dev/null 2>&1 || {
+            echo "Tag '${{ inputs.tag }}' does not exist."
+            exit 1
+          }
+
       - name: Extract version from tag
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "VERSION=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Update .csproj with version
         run: |
-          libcsproj=$(find . -name "*/FileEncrypter.csproj" | head -n 1)
-          toolcsproj=$(find . -name "*/FileEncrypter.Tool.csproj" | head -n 1)
+          libcsproj=$(find . -name "FileEncrypter.csproj" | head -n 1)
+          toolcsproj=$(find . -name "FileEncrypter.Tool.csproj" | head -n 1)
           version="${{ steps.get_version.outputs.VERSION }}"
           echo "Setting version to $version in $libcsproj and $toolcsproj "
 
@@ -50,7 +72,7 @@ jobs:
           sed -i "s|</PropertyGroup>|  <Version>${version}</Version>\n  <InformationalVersion>${version}</InformationalVersion>\n</PropertyGroup>|" "$toolcsproj"
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore ./FileEncrypter.Tool/FileEncrypter.Tool.csproj
 
       - name: Build
         run: dotnet build ./FileEncrypter.Tool/FileEncrypter.Tool.csproj --configuration Release --no-restore

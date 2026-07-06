@@ -1,0 +1,66 @@
+# .github/workflows/publish.yml
+
+name: Build and Publish NuGet Package
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        env:
+          NUGET_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        with:
+          dotnet-version: '10.0.x'
+          source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+
+      - name: Extract version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Update .csproj with version
+        run: |
+          csproj=$(find . -name "*.csproj" | head -n 1)
+          version="${{ steps.get_version.outputs.VERSION }}"
+          echo "Setting version to $version in $csproj"
+
+          # Remove old version tags
+          sed -i '/<Version>.*<\/Version>/d' "$csproj"
+          sed -i '/<InformationalVersion>.*<\/InformationalVersion>/d' "$csproj"
+
+          # Inject new version tags before </PropertyGroup>
+          sed -i "s|</PropertyGroup>|  <Version>${version}</Version>\n  <InformationalVersion>${version}</InformationalVersion>\n</PropertyGroup>|" "$csproj"
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Pack
+        run: dotnet pack --configuration Release --no-build --output ./nupkgs
+
+      - name: Push to GitHub Packages
+        run: |
+          dotnet nuget push ./nupkgs/*.nupkg \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --api-key ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to NuGet.org
+        run: |
+          dotnet nuget push ./nupkgs/*.nupkg \
+            --source "https://api.nuget.org/v3/index.json" \
+            --api-key ${{ secrets.NUGET_API_KEY }}

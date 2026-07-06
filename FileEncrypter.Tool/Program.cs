@@ -1,8 +1,14 @@
 ﻿using DotMake.CommandLine;
-using FileEncrypter;
 using FileEncrypter.Tool;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
+
+if (!OperatingSystem.IsWindows())
+{
+    await Console.Error.WriteLineAsync("This tool is only available on Windows due to usage of DPAPI\nPress any key to exit...").ConfigureAwait(false);
+    Console.ReadKey(true);
+    return 1;
+}
 
 // DI Configuration
 Cli.Ext.ConfigureServices(services =>

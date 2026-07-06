@@ -1,4 +1,5 @@
 # .github/workflows/dotnet-build-test.yml
+
 name: Build and Test (.NET 10.0)
 
 on:
@@ -13,11 +14,11 @@ jobs:
     runs-on: windows-latest     # Needed for DPAPI tests
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v7
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
 
@@ -25,8 +26,8 @@ jobs:
         run: dotnet restore
 
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build --configuration Release --no-restore
 
       - name: Run unit tests
         run: |
-          dotnet test --configuration Release --verbosity detailed --no-build --no-restore
+          dotnet test --configuration Release --no-build --no-restore --verbosity normal

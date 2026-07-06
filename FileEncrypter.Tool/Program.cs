@@ -1,5 +1,6 @@
 ﻿using DotMake.CommandLine;
 using FileEncrypter;
+using FileEncrypter.Tool;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 

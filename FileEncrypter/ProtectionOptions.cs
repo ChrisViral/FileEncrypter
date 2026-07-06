@@ -24,5 +24,8 @@ public readonly record struct ProtectionOptions(byte[]? Password = null,
                                                 bool DeleteFiles = true,
                                                 int FileTimeout = -1)
 {
+    /// <summary>
+    /// Creates new ProtectionOptions with default values
+    /// </summary>
     public ProtectionOptions() : this(null) { }
 }

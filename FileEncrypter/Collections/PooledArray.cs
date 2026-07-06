@@ -1,10 +1,10 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Collections;
 using System.Diagnostics;
 using FileEncrypter.DebugViews;
 using JetBrains.Annotations;
 
-namespace FileEncrypter;
+namespace FileEncrypter.Collections;
 
 /// <summary>
 /// A pooled array wrapper
@@ -29,7 +29,7 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
         set => this.AsSpan[index] = value;
     }
 
-    /// <inheritdoc cref="System.Span{T}.Item(System.Int32)"/>
+    /// <inheritdoc cref="this(int)"/>
     /// <exception cref="ObjectDisposedException">If the pooled array has already been returned</exception>
     public readonly T this[Index index]
     {
@@ -88,7 +88,7 @@ public struct PooledArray<T>(int length) : IList<T>, IDisposable
     /// Gets a reference to the element at the specified zero-based index.
     /// </summary>
     /// <returns>A reference to the element at the specified index.</returns>
-    /// <inheritdoc cref="Item(System.Int32)"/>
+    /// <inheritdoc cref="this(int)"/>
     public readonly ref T GetRef(int index) => ref this.AsSpan[index];
 
     /// <inheritdoc cref="GetRef(System.Int32)"/>

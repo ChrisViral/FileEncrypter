@@ -30,4 +30,4 @@ jobs:
 
       - name: Run unit tests
         run: |
-          dotnet test --configuration Release --verbosity detailed --no-build --no-restore
+          dotnet test --configuration Release --verbosity normal --no-build --no-restore

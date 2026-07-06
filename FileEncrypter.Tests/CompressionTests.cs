@@ -16,7 +16,7 @@ public class CompressionTests
         Protector protector = new(NullLogger<Protector>.Instance, options);
 
         byte[] data = "abc"u8.ToArray();
-        (PooledArray<byte> compressed, int compressedSize) result = await protector.CompressData(data, CancellationToken.None);
+        (PooledArray<byte> compressed, int compressedSize) result = await protector.CompressData(data, CancellationToken.None).ConfigureAwait(true);
 
         try
         {
@@ -47,13 +47,13 @@ public class CompressionTests
         const string ORIGINAL_FILE_NAME = "sample.txt";
         string originalPath = Path.Combine(tempDir.DirectoryPath, ORIGINAL_FILE_NAME);
         byte[] originalBytes = "Hello compression test!"u8.ToArray();
-        await File.WriteAllBytesAsync(originalPath, originalBytes);
+        await File.WriteAllBytesAsync(originalPath, originalBytes).ConfigureAwait(true);
 
         ProtectionOptions options = new(Compression: compression);
         Protector protector = new(NullLogger<Protector>.Instance, options);
 
         // Act – encrypt
-        Result encryptResult = await protector.ProtectAll(new[] { new FileInfo(originalPath) });
+        Result encryptResult = await protector.ProtectAll(new[] { new FileInfo(originalPath) }).ConfigureAwait(true);
         encryptResult.IsSuccess.Should().BeTrue();
 
         string encryptedPath = originalPath + options.EncryptedExtension;
@@ -62,11 +62,11 @@ public class CompressionTests
 
         // Act – decrypt with same settings
         Protector protectorDecrypt = new(NullLogger<Protector>.Instance, options);
-        Result decryptResult = await protectorDecrypt.ProtectAll(new[] { new FileInfo(encryptedPath) });
+        Result decryptResult = await protectorDecrypt.ProtectAll(new[] { new FileInfo(encryptedPath) }).ConfigureAwait(true);
         decryptResult.IsSuccess.Should().BeTrue();
 
         // Verify decrypted file content
-        byte[] decryptedBytes = await File.ReadAllBytesAsync(originalPath);
+        byte[] decryptedBytes = await File.ReadAllBytesAsync(originalPath).ConfigureAwait(true);
         decryptedBytes.Should().Equal(originalBytes);
 
         File.Exists(encryptedPath).Should().BeFalse(); // removed after decryption
@@ -81,8 +81,8 @@ public class CompressionTests
 
         byte[] data = "data"u8.ToArray();
 
-        Func<Task> act = async () => await protector.CompressData(data, CancellationToken.None);
+        Func<Task> act = async () => await protector.CompressData(data, CancellationToken.None).ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<InvalidEnumArgumentException>();
+        await act.Should().ThrowAsync<InvalidEnumArgumentException>().ConfigureAwait(true);
     }
 }

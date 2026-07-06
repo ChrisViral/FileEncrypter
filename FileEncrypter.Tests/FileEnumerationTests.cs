@@ -20,9 +20,9 @@ public class FileEnumerationTests
         string fileBPath = Path.Combine(tempDir.DirectoryPath, "dir2", "fileB.log");
         string fileCPath = Path.Combine(subDir, "fileC.txt");
 
-        await File.WriteAllBytesAsync(fileAPath, "a"u8.ToArray());
-        await File.WriteAllBytesAsync(fileBPath, "b"u8.ToArray());
-        await File.WriteAllBytesAsync(fileCPath, "c"u8.ToArray());
+        await File.WriteAllBytesAsync(fileAPath, "a"u8.ToArray()).ConfigureAwait(true);
+        await File.WriteAllBytesAsync(fileBPath, "b"u8.ToArray()).ConfigureAwait(true);
+        await File.WriteAllBytesAsync(fileCPath, "c"u8.ToArray()).ConfigureAwait(true);
 
         ProtectionOptions options = new(SearchPattern: "*.txt", SearchOption: SearchOption.AllDirectories);
         Protector protector = new(NullLogger<Protector>.Instance, options);
@@ -51,8 +51,8 @@ public class FileEnumerationTests
         string fileRootPath = Path.Combine(tempDir.DirectoryPath, "root.txt");
         string fileSubPath = Path.Combine(tempDir.DirectoryPath, "sub", "child.txt");
 
-        await File.WriteAllBytesAsync(fileRootPath, "root"u8.ToArray());
-        await File.WriteAllBytesAsync(fileSubPath, "child"u8.ToArray());
+        await File.WriteAllBytesAsync(fileRootPath, "root"u8.ToArray()).ConfigureAwait(true);
+        await File.WriteAllBytesAsync(fileSubPath, "child"u8.ToArray()).ConfigureAwait(true);
 
         ProtectionOptions options = new(SearchPattern: "*.txt", SearchOption: SearchOption.TopDirectoryOnly);
         Protector protector = new(NullLogger<Protector>.Instance, options);

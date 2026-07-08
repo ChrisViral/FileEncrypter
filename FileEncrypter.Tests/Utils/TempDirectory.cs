@@ -23,7 +23,7 @@ internal sealed class TempDirectory : IDisposable
         do
         {
             // Make sure path doesn't already exist
-            this.DirectoryPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            this.DirectoryPath = Path.Combine(Path.GetTempPath(), nameof(FileEncrypter), Guid.NewGuid().ToString());
         }
         while (Directory.Exists(this.DirectoryPath));
 

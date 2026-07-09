@@ -2,7 +2,6 @@ using System.Buffers.Binary;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.ComponentModel;
-using CSharpFunctionalExtensions;
 using FileEncrypter.Collections;
 using FileEncrypter.Tests.Utils;
 
@@ -13,8 +12,11 @@ public sealed class CompressionTests
     [Fact]
     public async Task CompressData_None_ProducesHeaderAndUnchangedPayload()
     {
+        // Setup data
         ProtectionOptions options = new(Compression: CompressionOption.None);
         Protector protector = new(NullLogger<Protector>.Instance, options);
+
+        // Compress and check length and headers
         (PooledArray<byte> compressed, int compressedSize) = await protector.CompressData(TestUtils.FileDataBytes, CancellationToken.None);
         using (compressed)
         {
@@ -32,8 +34,11 @@ public sealed class CompressionTests
     [InlineData(CompressionOption.ZLib)]
     public async Task CompressData_CompressedOptions_ProducesHeaders(CompressionOption compression)
     {
+        // Setup data
         ProtectionOptions options = new(Compression: compression);
         Protector protector = new(NullLogger<Protector>.Instance, options);
+
+        // Compress and check length and headers
         (PooledArray<byte> compressed, int compressedSize) = await protector.CompressData(TestUtils.FileDataBytes, CancellationToken.None);
         using (compressed)
         {
@@ -52,11 +57,15 @@ public sealed class CompressionTests
     [InlineData(CompressionOption.ZLib)]
     public async Task CompressDecompress_AllCompressionOptions_ShouldReturnSameData(CompressionOption compression)
     {
+        // Setup data
         ProtectionOptions options = new(Compression: compression);
         Protector protector = new(NullLogger<Protector>.Instance, options);
+
+        // Compress
         (PooledArray<byte> compressed, int compressedSize) = await protector.CompressData(TestUtils.FileDataBytes, CancellationToken.None);
         using (compressed)
         {
+            // Decompress and check data
             (PooledArray<byte> decompressed, int decompressedSize) = await Protector.DecompressData(compressed, compressedSize, CancellationToken.None);
             using (decompressed)
             {
@@ -66,48 +75,14 @@ public sealed class CompressionTests
         }
     }
 
-    [Theory]
-    [InlineData(CompressionOption.None)]
-    [InlineData(CompressionOption.Brotli)]
-    [InlineData(CompressionOption.Deflate)]
-    [InlineData(CompressionOption.GZip)]
-    [InlineData(CompressionOption.ZLib)]
-    public async Task EncryptDecrypt_AllCompressionOptions_ShouldReturnSameData(CompressionOption compression)
-    {
-
-        // Arrange – create a file with some content
-        using TempDirectory tempDir = new();
-        string originalPath = Path.Combine(tempDir.DirectoryPath, TestUtils.FILE_NAME);
-        await File.WriteAllBytesAsync(originalPath, TestUtils.FileDataBytes);
-
-        ProtectionOptions options = new(Compression: compression);
-        Protector protector = new(NullLogger<Protector>.Instance, options);
-
-        // Act – encrypt
-        Result encryptResult = await protector.ProtectFile(new FileInfo(originalPath), CancellationToken.None);
-        encryptResult.IsSuccess.Should().BeTrue();
-
-        string encryptedPath = originalPath + options.EncryptedExtension;
-        File.Exists(encryptedPath).Should().BeTrue();
-        File.Exists(originalPath).Should().BeFalse(); // deleted after encryption
-
-        // Act – decrypt with same settings
-        Result decryptResult = await protector.ProtectFile(new FileInfo(encryptedPath), CancellationToken.None);
-        decryptResult.IsSuccess.Should().BeTrue();
-
-        File.Exists(originalPath).Should().BeTrue();
-        File.Exists(encryptedPath).Should().BeFalse(); // removed after decryption
-
-        // Verify decrypted file content
-        byte[] decryptedBytes = await File.ReadAllBytesAsync(originalPath);
-        decryptedBytes.Should().Equal(TestUtils.FileDataBytes);
-    }
-
     [Fact]
     public async Task CompressData_InvalidCompressionOption_ThrowsException()
     {
+        // Setup data
         ProtectionOptions options = new(Compression: (CompressionOption)byte.MaxValue);
         Protector protector = new(NullLogger<Protector>.Instance, options);
+
+        // Compression should throw
         Func<Task> compress = async () => await protector.CompressData(TestUtils.FileDataBytes, CancellationToken.None);
         await compress.Should().ThrowAsync<InvalidEnumArgumentException>();
     }
@@ -115,9 +90,17 @@ public sealed class CompressionTests
     [Fact]
     public async Task DecompressData_InvalidCompressionOption_ThrowsException()
     {
-        Protector protector = new(NullLogger<Protector>.Instance, new ProtectionOptions());
+        // Setup data
+        ProtectionOptions options = new();
+        Protector protector = new(NullLogger<Protector>.Instance, options);
+
+        // Compress
         (PooledArray<byte> compressed, int compressedSize) =  await protector.CompressData(TestUtils.FileDataBytes, CancellationToken.None);
+
+        // Corrupt file
         compressed[0] = byte.MaxValue;
+
+        // Decompression should throw
         Func<Task> decompress = async () => await Protector.DecompressData(compressed, compressedSize, CancellationToken.None);
         await decompress.Should().ThrowAsync<InvalidEnumArgumentException>();
     }

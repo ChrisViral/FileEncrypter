@@ -10,6 +10,7 @@ public static class TestUtils
                                   + "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. "
                                   + "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
     public const string PASSWORD  = "password123";
+    public const string ENCRYPTED_FILE_NAME = FILE_NAME + ProtectionOptions.DEFAULT_EXTENSION;
 
     public static byte[] FileDataBytes { get; } = Encoding.UTF8.GetBytes(FILE_DATA);
 

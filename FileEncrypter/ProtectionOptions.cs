@@ -15,15 +15,25 @@ namespace FileEncrypter;
 /// <param name="DeleteFiles">If old files should be kept deleted after being processed</param>
 /// <param name="FileTimeout">The timeout for individual file encryption/decryption, in ms (-1 for no timeout)</param>
 public readonly record struct ProtectionOptions(byte[]? Password = null,
-                                                string EncryptedExtension = ".enc",
+                                                string EncryptedExtension = ProtectionOptions.DEFAULT_EXTENSION,
                                                 ProtectionModes ValidModes = ProtectionModes.All,
-                                                string SearchPattern = "*",
+                                                string SearchPattern = ProtectionOptions.DEFAULT_PATTERN,
                                                 SearchOption SearchOption = SearchOption.TopDirectoryOnly,
                                                 DataProtectionScope Scope = DataProtectionScope.CurrentUser,
                                                 CompressionOption Compression = CompressionOption.Brotli,
                                                 bool DeleteFiles = true,
                                                 int FileTimeout = -1)
 {
+    /// <summary>
+    /// Default encrypted extension
+    /// </summary>
+    public const string DEFAULT_EXTENSION = ".enc";
+
+    /// <summary>
+    /// Default search pattern
+    /// </summary>
+    public const string DEFAULT_PATTERN = "*";
+
     /// <summary>
     /// Creates new ProtectionOptions with default values
     /// </summary>

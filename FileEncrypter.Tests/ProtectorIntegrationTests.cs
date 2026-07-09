@@ -152,4 +152,37 @@ public class ProtectorIntegrationTests
         Result result = await protector.ProtectAll(Array.Empty<FileSystemInfo>()).ConfigureAwait(true);
         result.IsSuccess.Should().BeTrue();
     }
+
+    [Theory]
+    [InlineData(CompressionOption.None)]
+    [InlineData(CompressionOption.Brotli)]
+    [InlineData(CompressionOption.Deflate)]
+    [InlineData(CompressionOption.GZip)]
+    [InlineData(CompressionOption.ZLib)]
+    public async Task EncryptDecrypt_AllCompressionOptions_ShouldReturnSameData(CompressionOption compression)
+    {
+        // Setup data
+        using TempDirectory tempDir = new();
+        string originalPath = Path.Combine(tempDir.DirectoryPath, TestUtils.FILE_NAME);
+        await File.WriteAllBytesAsync(originalPath, TestUtils.FileDataBytes);
+
+        // Encrypt should succeed
+        ProtectionOptions options = new(Compression: compression);
+        Protector protector = new(NullLogger<Protector>.Instance, options);
+        Result encryptResult = await protector.ProtectFile(new FileInfo(originalPath), CancellationToken.None);
+        encryptResult.IsSuccess.Should().BeTrue();
+        string encryptedPath = originalPath + options.EncryptedExtension;
+        File.Exists(encryptedPath).Should().BeTrue();
+        File.Exists(originalPath).Should().BeFalse();
+
+        // Decrypt should succeed
+        Result decryptResult = await protector.ProtectFile(new FileInfo(encryptedPath), CancellationToken.None);
+        decryptResult.IsSuccess.Should().BeTrue();
+        File.Exists(originalPath).Should().BeTrue();
+        File.Exists(encryptedPath).Should().BeFalse();
+
+        // Verify decrypted file content
+        byte[] decryptedBytes = await File.ReadAllBytesAsync(originalPath);
+        decryptedBytes.Should().Equal(TestUtils.FileDataBytes);
+    }
 }

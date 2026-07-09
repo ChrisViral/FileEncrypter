@@ -5,131 +5,96 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FileEncrypter.Tests;
 
-public class OptionFlagsTests
+public sealed class OptionFlagsTests : IDisposable
 {
+    private readonly TempDirectory tempDirectory = new();
+
     [Fact]
     public async Task ValidModes_EncryptOnly_ShouldPreventDecryption()
     {
-        using TempDirectory tempDir = new();
-        const string FILE_NAME = "data.txt";
-        string filePath = Path.Combine(tempDir.DirectoryPath, FILE_NAME);
-        await File.WriteAllBytesAsync(filePath, "secret"u8.ToArray()).ConfigureAwait(true);
+        // Setup data
+        await File.WriteAllBytesAsync(this.tempDirectory.OriginalPath, TestUtils.FileDataBytes);
 
         // Only encryption allowed
         ProtectionOptions options = new(ValidModes: ProtectionModes.Encrypt);
         Protector protector = new(NullLogger<Protector>.Instance, options);
 
-        // Encrypt – should succeed
-        Result encResult = await protector.ProtectAll(new[] { new FileInfo(filePath) }).ConfigureAwait(true);
-        encResult.IsSuccess.Should().BeTrue();
-        string encryptedPath = filePath + options.EncryptedExtension;
-        File.Exists(encryptedPath).Should().BeTrue();
-        File.Exists(filePath).Should().BeFalse();
+        // Encrypt should succeed
+        Result encryptResult = await protector.ProtectFile(this.tempDirectory.OriginalFile, CancellationToken.None);
+        encryptResult.IsSuccess.Should().BeTrue();
+        File.Exists(this.tempDirectory.EncryptedPath).Should().BeTrue();
+        File.Exists(this.tempDirectory.OriginalPath).Should().BeFalse();
 
-        // Decrypt – should fail because mode disallows decrypt
-        Protector protectorDecrypt = new(NullLogger<Protector>.Instance, options);
-        Result decResult = await protectorDecrypt.ProtectAll(new[] { new FileInfo(encryptedPath) }).ConfigureAwait(true);
-        decResult.IsFailure.Should().BeTrue();
-        File.Exists(encryptedPath).Should().BeTrue(); // still present
+        // Decrypt should fail
+        Result decryptResult = await protector.ProtectFile(this.tempDirectory.EncryptedFile, CancellationToken.None);
+        decryptResult.IsFailure.Should().BeTrue();
+        File.Exists(this.tempDirectory.EncryptedPath).Should().BeTrue();
+        File.Exists(this.tempDirectory.OriginalPath).Should().BeFalse();
     }
 
     [Fact]
     public async Task ValidModes_DecryptOnly_ShouldPreventEncryption()
     {
-        // Start with an encrypted file (simulated by raw bytes)
-        using TempDirectory tempDir = new();
-        string tempFilePath = Path.Combine(tempDir.DirectoryPath, "cipher.txt");
-        await File.WriteAllBytesAsync(tempFilePath, "topsecret"u8.ToArray()).ConfigureAwait(true);
+        // Setup data
+        await File.WriteAllBytesAsync(this.tempDirectory.OriginalPath, TestUtils.FileDataBytes);
 
-        // Only encryption allowed – no decryption mode
-        ProtectionOptions encryptOptions = new(ValidModes: ProtectionModes.Encrypt, DeleteFiles: false);
-        Protector protectorEncrypt = new(NullLogger<Protector>.Instance, encryptOptions);
+        // Encrypt a file
+        ProtectionOptions encryptOptions = new();
+        Protector encryptProtector = new(NullLogger<Protector>.Instance, encryptOptions);
+        await encryptProtector.ProtectFile(this.tempDirectory.OriginalFile, CancellationToken.None);
 
-        // Encrypt should succeed
-        Result encResult = await protectorEncrypt.ProtectFile(new FileInfo(tempFilePath), CancellationToken.None).ConfigureAwait(true);
-        encResult.IsSuccess.Should().BeTrue();
-
-        // Only decryption allowed – no encryption mode
-        string tempEncryptedPath = tempFilePath + encryptOptions.EncryptedExtension;
-        ProtectionOptions decryptOptions = new(ValidModes: ProtectionModes.Decrypt, DeleteFiles: false);
-        Protector protectorDecrypt = new(NullLogger<Protector>.Instance, decryptOptions);
+        // Only decryption allowed
+        ProtectionOptions options = new(ValidModes: ProtectionModes.Decrypt);
+        Protector protector = new(NullLogger<Protector>.Instance, options);
 
         // Decrypt should succeed
-        Result decResult = await protectorDecrypt.ProtectAll(new[] { new FileInfo(tempEncryptedPath) }).ConfigureAwait(true);
-        decResult.IsSuccess.Should().BeTrue();
+        Result decryptResult = await protector.ProtectFile(this.tempDirectory.EncryptedFile, CancellationToken.None);
+        decryptResult.IsSuccess.Should().BeTrue();
+        File.Exists(this.tempDirectory.EncryptedPath).Should().BeFalse();
+        File.Exists(this.tempDirectory.OriginalPath).Should().BeTrue();
 
-        // Encrypting with the protector only meant for encrypting should fail
-        encResult = await protectorDecrypt.ProtectAll(new[] { new FileInfo(tempFilePath) }).ConfigureAwait(true);
-        encResult.IsFailure.Should().BeTrue();
-
-        // Encrypting with the protector only meant for encrypting should fail
-        decResult = await protectorEncrypt.ProtectAll(new[] { new FileInfo(tempEncryptedPath) }).ConfigureAwait(true);
-        decResult.IsFailure.Should().BeTrue();
+        // Encrypt should fail
+        Result encryptResult = await protector.ProtectFile(this.tempDirectory.OriginalFile, CancellationToken.None);
+        encryptResult.IsFailure.Should().BeTrue();
+        File.Exists(this.tempDirectory.EncryptedPath).Should().BeFalse();
+        File.Exists(this.tempDirectory.OriginalPath).Should().BeTrue();
     }
 
     [Fact]
     public async Task EncryptedExtension_CustomSuffix_ShouldUseGivenExtension()
     {
-        using TempDirectory tempDir = new();
-        const string FILE_NAME = "plain.txt";
-        string filePath = Path.Combine(tempDir.DirectoryPath, FILE_NAME);
-        await File.WriteAllBytesAsync(filePath, "content"u8.ToArray()).ConfigureAwait(true);
+        // Setup data
+        await File.WriteAllBytesAsync(this.tempDirectory.OriginalPath, TestUtils.FileDataBytes);
 
+        // Setup custom extension
         const string CUSTOM_EXT = ".crypt";
         ProtectionOptions options = new(EncryptedExtension: CUSTOM_EXT);
         Protector protector = new(NullLogger<Protector>.Instance, options);
 
-        // Encrypt – should use the custom suffix
-        Result encResult = await protector.ProtectAll(new[] { new FileInfo(filePath) }).ConfigureAwait(true);
-        encResult.IsSuccess.Should().BeTrue();
-        string expectedEncrypted = filePath + CUSTOM_EXT;
-        File.Exists(expectedEncrypted).Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task DeleteFiles_True_ShouldRemoveOriginal_OnEncryptAndDecrypt()
-    {
-        // Create a plain file and encrypt it with default options (DeleteFiles=true)
-        using TempDirectory tempDir = new();
-        const string FILE_NAME = "sample.txt";
-        string filePath = Path.Combine(tempDir.DirectoryPath, FILE_NAME);
-        await File.WriteAllBytesAsync(filePath, "data"u8.ToArray()).ConfigureAwait(true);
-
-        ProtectionOptions options = new(); // DeleteFiles defaults to true
-        Protector protector = new(NullLogger<Protector>.Instance, options);
-
-        Result encResult = await protector.ProtectAll(new[] { new FileInfo(filePath) }).ConfigureAwait(true);
-        encResult.IsSuccess.Should().BeTrue();
-
-        string encryptedPath = filePath + options.EncryptedExtension;
+        // Encrypt should succeed with custom extension
+        Result result = await protector.ProtectFile(this.tempDirectory.OriginalFile, CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        string encryptedPath = this.tempDirectory.OriginalPath + CUSTOM_EXT;
         File.Exists(encryptedPath).Should().BeTrue();
-        File.Exists(filePath).Should().BeFalse(); // original removed
-
-        // Decrypt back – delete flag should again remove the .enc file
-        Protector protectorDecrypt = new(NullLogger<Protector>.Instance, options);
-        Result decResult = await protectorDecrypt.ProtectAll(new[] { new FileInfo(encryptedPath) }).ConfigureAwait(true);
-        decResult.IsSuccess.Should().BeTrue();
-
-        File.Exists(filePath).Should().BeTrue();
-        File.Exists(encryptedPath).Should().BeFalse();
     }
 
     [Fact]
     public async Task DeleteFiles_False_ShouldRetainBothVersions()
     {
-        using TempDirectory tempDir = new();
-        const string FILE_NAME = "original.txt";
-        string filePath = Path.Combine(tempDir.DirectoryPath, FILE_NAME);
-        await File.WriteAllBytesAsync(filePath, "keep it"u8.ToArray()).ConfigureAwait(true);
+        // Setup data
+        await File.WriteAllBytesAsync(this.tempDirectory.OriginalPath, TestUtils.FileDataBytes);
 
-        ProtectionOptions options = new(DeleteFiles: false); // keep originals
+        // Setup without file deletion
+        ProtectionOptions options = new(DeleteFiles: false);
         Protector protector = new(NullLogger<Protector>.Instance, options);
 
-        Result encResult = await protector.ProtectAll(new[] { new FileInfo(filePath) }).ConfigureAwait(true);
-        encResult.IsSuccess.Should().BeTrue();
-
-        string encryptedPath = filePath + options.EncryptedExtension;
-        File.Exists(encryptedPath).Should().BeTrue();
-        File.Exists(filePath).Should().BeTrue(); // original stays
+        // Encrypt should succeed and keep files
+        Result result = await protector.ProtectFile(this.tempDirectory.OriginalFile, CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        File.Exists(this.tempDirectory.EncryptedPath).Should().BeTrue();
+        File.Exists(this.tempDirectory.OriginalPath).Should().BeTrue();
     }
+
+    /// <inheritdoc />
+    public void Dispose() => this.tempDirectory.Dispose();
 }

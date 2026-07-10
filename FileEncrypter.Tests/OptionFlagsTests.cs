@@ -39,7 +39,7 @@ public sealed class OptionFlagsTests : IDisposable
         await File.WriteAllBytesAsync(this.tempDirectory.OriginalPath, TestUtils.FileDataBytes);
 
         // Encrypt a file
-        ProtectionOptions encryptOptions = new();
+        ProtectionOptions encryptOptions = ProtectionOptions.Default;
         Protector encryptProtector = new(NullLogger<Protector>.Instance, encryptOptions);
         await encryptProtector.ProtectFile(this.tempDirectory.OriginalFile, CancellationToken.None);
 

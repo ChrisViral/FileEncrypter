@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿using System.Security.Cryptography;
+using System.Text;
+using FileEncrypter.Collections;
 
 namespace FileEncrypter.Tests.Utils;
 

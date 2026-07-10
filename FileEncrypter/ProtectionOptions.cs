@@ -35,7 +35,12 @@ public readonly record struct ProtectionOptions(byte[]? Password = null,
     public const string DEFAULT_PATTERN = "*";
 
     /// <summary>
+    /// Default protection options
+    /// </summary>
+    public static ProtectionOptions Default { get; } = new();
+
+    /// <summary>
     /// Creates new ProtectionOptions with default values
     /// </summary>
-    public ProtectionOptions() : this(null) { }
+    public ProtectionOptions() : this(EncryptedExtension: DEFAULT_EXTENSION) { }
 }

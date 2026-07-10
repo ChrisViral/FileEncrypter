@@ -91,7 +91,7 @@ public sealed class CompressionTests
     public async Task DecompressData_InvalidCompressionOption_ThrowsException()
     {
         // Setup data
-        ProtectionOptions options = new();
+        ProtectionOptions options = ProtectionOptions.Default;
         Protector protector = new(NullLogger<Protector>.Instance, options);
 
         // Compress

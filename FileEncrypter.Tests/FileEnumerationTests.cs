@@ -1,71 +1,142 @@
 using FileEncrypter.Tests.Utils;
 using FluentAssertions;
+using JetBrains.Annotations;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FileEncrypter.Tests;
 
-public class FileEnumerationTests
+[UsedImplicitly]
+public sealed class FileEnumerationFixture : IDisposable
 {
-    [Fact]
-    public async Task GetFilesToProtect_WithDirectory_EnumeratesAllMatchingFiles_AllDirectories()
+    private const int SUBDIR_COUNT = 5;
+    public const string LOG_EXTENSION = ".log";
+
+    internal TempDirectory TempDirectory { get; } = new();
+    public List<FileInfo> TopFiles { get; } = [];
+    public List<FileInfo> TextFiles { get; } = [];
+    public List<FileInfo> LogFiles { get; } = [];
+    public List<FileInfo> AllFiles { get; } = [];
+
+    public FileEnumerationFixture()
     {
-        // Arrange – create nested structure: root/dir1/fileA.txt, dir2/fileB.log, dir3/sub/fileC.txt
-        using TempDirectory tempDir = new();
-        Directory.CreateDirectory(Path.Combine(tempDir.DirectoryPath, "dir1"));
-        Directory.CreateDirectory(Path.Combine(tempDir.DirectoryPath, "dir2"));
-        string subDir = Path.Combine(tempDir.DirectoryPath, "dir3", "sub");
-        Directory.CreateDirectory(subDir);
+        // Create text files
+        DirectoryInfo tempDir = this.TempDirectory.DirectoryInfo;
+        for (int i = 0; i < SUBDIR_COUNT; i++)
+        {
+            DirectoryInfo subDir = tempDir.CreateSubdirectory($"temp{i}");
+            FileInfo textFile = new(Path.Combine(subDir.FullName, TestUtils.FILE_NAME));
+            File.WriteAllBytes(textFile.FullName, TestUtils.FileDataBytes);
+            this.TextFiles.Add(textFile);
+        }
 
-        string fileAPath = Path.Combine(tempDir.DirectoryPath, "dir1", "fileA.txt");
-        string fileBPath = Path.Combine(tempDir.DirectoryPath, "dir2", "fileB.log");
-        string fileCPath = Path.Combine(subDir, "fileC.txt");
+        // Create log files
+        foreach (FileInfo textFile in this.TextFiles)
+        {
+            FileInfo logFile = new(Path.ChangeExtension(textFile.FullName, LOG_EXTENSION));
+            File.WriteAllBytes(logFile.FullName, TestUtils.FileDataBytes);
+            this.LogFiles.Add(logFile);
+        }
 
-        await File.WriteAllBytesAsync(fileAPath, "a"u8.ToArray()).ConfigureAwait(true);
-        await File.WriteAllBytesAsync(fileBPath, "b"u8.ToArray()).ConfigureAwait(true);
-        await File.WriteAllBytesAsync(fileCPath, "c"u8.ToArray()).ConfigureAwait(true);
+        // Create top level text file
+        FileInfo topFile = this.TempDirectory.OriginalFile;
+        File.WriteAllBytes(topFile.FullName, TestUtils.FileDataBytes);
+        this.TopFiles.Add(topFile);
+        this.TextFiles.Add(topFile);
 
-        ProtectionOptions options = new(SearchPattern: "*.txt", SearchOption: SearchOption.AllDirectories);
+        // Create top level log file
+        FileInfo topLogFile = new(Path.ChangeExtension(topFile.FullName, LOG_EXTENSION));
+        File.WriteAllBytes(topLogFile.FullName, TestUtils.FileDataBytes);
+        this.TopFiles.Add(topLogFile);
+        this.LogFiles.Add(topLogFile);
+
+        // Setup all files list
+        this.AllFiles.AddRange(this.TextFiles);
+        this.AllFiles.AddRange(this.LogFiles);
+
+        // Sort lists
+        this.TopFiles.Sort((a, b) => string.Compare(a.FullName, b.FullName, StringComparison.Ordinal));
+        this.TextFiles.Sort((a, b) => string.Compare(a.FullName, b.FullName, StringComparison.Ordinal));
+        this.LogFiles.Sort((a, b) => string.Compare(a.FullName, b.FullName, StringComparison.Ordinal));
+        this.AllFiles.Sort((a, b) => string.Compare(a.FullName, b.FullName, StringComparison.Ordinal));
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => this.TempDirectory.Dispose();
+}
+
+public sealed class FileEnumerationTests(FileEnumerationFixture fixture) : IClassFixture<FileEnumerationFixture>
+{
+    private readonly FileEnumerationFixture fixture = fixture;
+
+    [Fact]
+    public void GetFilesToProtect_AllDirectories_FindsSubfiles()
+    {
+        // Setup data
+        ProtectionOptions options = new(SearchOption: SearchOption.AllDirectories);
         Protector protector = new(NullLogger<Protector>.Instance, options);
 
-        // Act – enumerate files via GetFilesToProtect
-        FileSystemInfo[] targetInfos = [tempDir.DirectoryInfo];
-        string[] enumerated = protector.GetFilesToProtect(targetInfos.AsMemory())
-                                       .Where(f => f != null)
-                                       .Select(fi => fi!.FullName)
-                                       .OrderBy(p => p)
-                                       .ToArray();
+        // Get enumerated files
+        FileSystemInfo[] targets = [this.fixture.TempDirectory.DirectoryInfo];
+        FileInfo?[] filesFound = protector.GetFilesToProtect(targets.AsMemory()).ToArray();
 
-        // Assert – all .txt files in any subfolder should be present
-        enumerated.Should().Contain(fileAPath);
-        enumerated.Should().Contain(fileCPath);
-        enumerated.Should().NotContain(fileBPath); // log file shouldn't match pattern
+        // Make sure all is as expected
+        filesFound.ContainsAny(null).Should().BeFalse();
+        filesFound.Length.Should().Be(this.fixture.AllFiles.Count);
+        filesFound.OrderBy(f => f!.FullName, StringComparer.Ordinal)
+                  .Should().BeEqualTo(this.fixture.AllFiles, (a, b) => string.Equals(a!.FullName, b.FullName, StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task GetFilesToProtect_WithDirectory_TopDirectoryOnly()
+    public void GetFilesToProtect_TopDirectoryOnly_OnlyFindsTopFiles()
     {
-        // Arrange – create files at root and subfolder
-        using TempDirectory tempDir = new();
-        Directory.CreateDirectory(Path.Combine(tempDir.DirectoryPath, "sub"));
-
-        string fileRootPath = Path.Combine(tempDir.DirectoryPath, "root.txt");
-        string fileSubPath = Path.Combine(tempDir.DirectoryPath, "sub", "child.txt");
-
-        await File.WriteAllBytesAsync(fileRootPath, "root"u8.ToArray()).ConfigureAwait(true);
-        await File.WriteAllBytesAsync(fileSubPath, "child"u8.ToArray()).ConfigureAwait(true);
-
-        ProtectionOptions options = new(SearchPattern: "*.txt", SearchOption: SearchOption.TopDirectoryOnly);
+        // Setup data
+        ProtectionOptions options = new(SearchOption: SearchOption.TopDirectoryOnly);
         Protector protector = new(NullLogger<Protector>.Instance, options);
 
-        FileSystemInfo[] targetInfos = [tempDir.DirectoryInfo];
-        string[] enumerated = protector.GetFilesToProtect(targetInfos.AsMemory())
-                                       .Where(f => f != null)
-                                       .Select(fi => fi!.FullName)
-                                       .OrderBy(p => p)
-                                       .ToArray();
+        // Get enumerated files
+        FileSystemInfo[] targets = [this.fixture.TempDirectory.DirectoryInfo];
+        FileInfo?[] filesFound = protector.GetFilesToProtect(targets.AsMemory()).ToArray();
 
-        // Assert – only root-level .txt should be returned
-        enumerated.Should().Contain(fileRootPath);
-        enumerated.Should().NotContain(fileSubPath);
+        // Make sure all is as expected
+        filesFound.ContainsAny(null).Should().BeFalse();
+        filesFound.Length.Should().Be(this.fixture.TopFiles.Count);
+        filesFound.OrderBy(f => f!.FullName, StringComparer.Ordinal)
+                  .Should().BeEqualTo(this.fixture.TopFiles, (a, b) => string.Equals(a!.FullName, b.FullName, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GetFilesToProtect_WithTextPattern_FindsAllMatches()
+    {
+        // Setup data
+        ProtectionOptions options = new(SearchPattern: $"*{TestUtils.FILE_EXTENSION}", SearchOption: SearchOption.AllDirectories);
+        Protector protector = new(NullLogger<Protector>.Instance, options);
+
+        // Get enumerated files
+        FileSystemInfo[] targets = [this.fixture.TempDirectory.DirectoryInfo];
+        FileInfo?[] filesFound = protector.GetFilesToProtect(targets.AsMemory()).ToArray();
+
+        // Make sure all is as expected
+        filesFound.ContainsAny(null).Should().BeFalse();
+        filesFound.Length.Should().Be(this.fixture.TextFiles.Count);
+        filesFound.OrderBy(f => f!.FullName, StringComparer.Ordinal)
+                  .Should().BeEqualTo(this.fixture.TextFiles, (a, b) => string.Equals(a!.FullName, b.FullName, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GetFilesToProtect_WithLogPattern_FindsAllMatches()
+    {
+        // Setup data
+        ProtectionOptions options = new(SearchPattern: $"*{FileEnumerationFixture.LOG_EXTENSION}", SearchOption: SearchOption.AllDirectories);
+        Protector protector = new(NullLogger<Protector>.Instance, options);
+
+        // Get enumerated files
+        FileSystemInfo[] targets = [this.fixture.TempDirectory.DirectoryInfo];
+        FileInfo?[] filesFound = protector.GetFilesToProtect(targets.AsMemory()).ToArray();
+
+        // Make sure all is as expected
+        filesFound.ContainsAny(null).Should().BeFalse();
+        filesFound.Length.Should().Be(this.fixture.LogFiles.Count);
+        filesFound.OrderBy(f => f!.FullName, StringComparer.Ordinal)
+                  .Should().BeEqualTo(this.fixture.LogFiles, (a, b) => string.Equals(a!.FullName, b.FullName, StringComparison.Ordinal));
     }
 }

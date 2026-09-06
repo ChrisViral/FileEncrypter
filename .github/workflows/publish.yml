@@ -63,10 +63,18 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore ./FileEncrypter.Tool/FileEncrypter.Tool.csproj
 
+      - name: Build
+        run: |
+          dotnet build ./FileEncrypter.Tool/FileEncrypter.Tool.csproj
+            --no-restore
+            --configuration Release
+            /p:PackageVersion=${{ env.VERSION }}
+
       - name: Pack
         run: |
           dotnet pack ./FileEncrypter.Tool/FileEncrypter.Tool.csproj
             --no-restore
+            --no-build
             --configuration Release
             /p:PackageVersion=${{ env.VERSION }}
             --output ./nupkgs

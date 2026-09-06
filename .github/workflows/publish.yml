@@ -95,5 +95,5 @@ jobs:
         if: ${{ inputs.dry_run != true }}
         run: |
           dotnet nuget push ./nupkgs/*.nupkg \
-          --source https://api.nuget.org/v3/index.json \
-          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+            --source https://api.nuget.org/v3/index.json \
+            --api-key ${{ steps.login.outputs.NUGET_API_KEY }}

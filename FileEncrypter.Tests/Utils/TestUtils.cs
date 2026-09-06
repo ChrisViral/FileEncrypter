@@ -1,9 +1,9 @@
-﻿using System.Security.Cryptography;
-using System.Text;
-using FileEncrypter.Collections;
+﻿using System.Text;
+using JetBrains.Annotations;
 
 namespace FileEncrypter.Tests.Utils;
 
+[PublicAPI]
 public static class TestUtils
 {
     public const string FILE_EXTENSION = ".txt";

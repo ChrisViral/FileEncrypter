@@ -30,6 +30,7 @@ public sealed class FileEnumerationFixture : IDisposable
         }
 
         // Create log files
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (FileInfo textFile in this.TextFiles)
         {
             FileInfo logFile = new(Path.ChangeExtension(textFile.FullName, LOG_EXTENSION));
@@ -54,10 +55,11 @@ public sealed class FileEnumerationFixture : IDisposable
         this.AllFiles.AddRange(this.LogFiles);
 
         // Sort lists
-        this.TopFiles.Sort((a, b) => string.Compare(a.FullName, b.FullName, StringComparison.Ordinal));
-        this.TextFiles.Sort((a, b) => string.Compare(a.FullName, b.FullName, StringComparison.Ordinal));
-        this.LogFiles.Sort((a, b) => string.Compare(a.FullName, b.FullName, StringComparison.Ordinal));
-        this.AllFiles.Sort((a, b) => string.Compare(a.FullName, b.FullName, StringComparison.Ordinal));
+        Comparison<FileInfo> comparer = (a, b) => string.Compare(a.FullName, b.FullName, StringComparison.Ordinal);
+        this.TopFiles.Sort(comparer);
+        this.TextFiles.Sort(comparer);
+        this.LogFiles.Sort(comparer);
+        this.AllFiles.Sort(comparer);
     }
 
     /// <inheritdoc />
@@ -77,7 +79,7 @@ public sealed class FileEnumerationTests(FileEnumerationFixture fixture) : IClas
 
         // Get enumerated files
         FileSystemInfo[] targets = [this.fixture.TempDirectory.DirectoryInfo];
-        FileInfo?[] filesFound = protector.GetFilesToProtect(targets.AsMemory()).ToArray();
+        FileInfo?[] filesFound = [..protector.GetFilesToProtect(targets.AsMemory())];
 
         // Make sure all is as expected
         filesFound.ContainsAny(null).Should().BeFalse();
@@ -95,7 +97,7 @@ public sealed class FileEnumerationTests(FileEnumerationFixture fixture) : IClas
 
         // Get enumerated files
         FileSystemInfo[] targets = [this.fixture.TempDirectory.DirectoryInfo];
-        FileInfo?[] filesFound = protector.GetFilesToProtect(targets.AsMemory()).ToArray();
+        FileInfo?[] filesFound = [..protector.GetFilesToProtect(targets.AsMemory())];
 
         // Make sure all is as expected
         filesFound.ContainsAny(null).Should().BeFalse();
@@ -105,38 +107,25 @@ public sealed class FileEnumerationTests(FileEnumerationFixture fixture) : IClas
     }
 
     [Fact]
-    public void GetFilesToProtect_WithTextPattern_FindsAllMatches()
-    {
-        // Setup data
-        ProtectionOptions options = new(SearchPattern: $"*{TestUtils.FILE_EXTENSION}", SearchOption: SearchOption.AllDirectories);
-        Protector protector = new(NullLogger<Protector>.Instance, options);
-
-        // Get enumerated files
-        FileSystemInfo[] targets = [this.fixture.TempDirectory.DirectoryInfo];
-        FileInfo?[] filesFound = protector.GetFilesToProtect(targets.AsMemory()).ToArray();
-
-        // Make sure all is as expected
-        filesFound.ContainsAny(null).Should().BeFalse();
-        filesFound.Length.Should().Be(this.fixture.TextFiles.Count);
-        filesFound.OrderBy(f => f!.FullName, StringComparer.Ordinal)
-                  .Should().BeEqualTo(this.fixture.TextFiles, (a, b) => string.Equals(a!.FullName, b.FullName, StringComparison.Ordinal));
-    }
+    public void GetFilesToProtect_WithTextPattern_FindsAllMatches() => GetFilesToProtect_WithData_FindsAllMatches(TestUtils.FILE_EXTENSION, this.fixture.TextFiles);
 
     [Fact]
-    public void GetFilesToProtect_WithLogPattern_FindsAllMatches()
+    public void GetFilesToProtect_WithLogPattern_FindsAllMatches() => GetFilesToProtect_WithData_FindsAllMatches(FileEnumerationFixture.LOG_EXTENSION, this.fixture.LogFiles);
+
+    private void GetFilesToProtect_WithData_FindsAllMatches(string extension, List<FileInfo> files)
     {
         // Setup data
-        ProtectionOptions options = new(SearchPattern: $"*{FileEnumerationFixture.LOG_EXTENSION}", SearchOption: SearchOption.AllDirectories);
+        ProtectionOptions options = new(SearchPattern: $"*{extension}", SearchOption: SearchOption.AllDirectories);
         Protector protector = new(NullLogger<Protector>.Instance, options);
 
         // Get enumerated files
         FileSystemInfo[] targets = [this.fixture.TempDirectory.DirectoryInfo];
-        FileInfo?[] filesFound = protector.GetFilesToProtect(targets.AsMemory()).ToArray();
+        FileInfo?[] filesFound = [..protector.GetFilesToProtect(targets.AsMemory())];
 
         // Make sure all is as expected
         filesFound.ContainsAny(null).Should().BeFalse();
-        filesFound.Length.Should().Be(this.fixture.LogFiles.Count);
+        filesFound.Length.Should().Be(files.Count);
         filesFound.OrderBy(f => f!.FullName, StringComparer.Ordinal)
-                  .Should().BeEqualTo(this.fixture.LogFiles, (a, b) => string.Equals(a!.FullName, b.FullName, StringComparison.Ordinal));
+                  .Should().BeEqualTo(files, (a, b) => string.Equals(a!.FullName, b.FullName, StringComparison.Ordinal));
     }
 }

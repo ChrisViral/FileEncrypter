@@ -63,6 +63,10 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore ./FileEncrypter.Tool/FileEncrypter.Tool.csproj
 
+      - name: Build
+        run: dotnet build ./FileEncrypter.Tool/FileEncrypter.Tool.csproj \
+          --configuration Release
+
       - name: Pack
         run: dotnet pack ./FileEncrypter.Tool/FileEncrypter.Tool.csproj \
           --configuration Release \

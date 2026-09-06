@@ -11,6 +11,26 @@ internal sealed class TempDirectory : IDisposable
     public string DirectoryPath { get; private set; }
 
     /// <summary>
+    /// Original file path
+    /// </summary>
+    public string OriginalPath => Path.Combine(this.DirectoryPath, TestUtils.FILE_NAME);
+
+    /// <summary>
+    /// Encrypted file path
+    /// </summary>
+    public string EncryptedPath => Path.Combine(this.DirectoryPath, TestUtils.ENCRYPTED_FILE_NAME);
+
+    /// <summary>
+    /// Original file
+    /// </summary>
+    public FileInfo OriginalFile => new(this.OriginalPath);
+
+    /// <summary>
+    /// Encrypted file
+    /// </summary>
+    public FileInfo EncryptedFile => new(this.EncryptedPath);
+
+    /// <summary>
     /// Temp directory info
     /// </summary>
     public DirectoryInfo DirectoryInfo => new(this.DirectoryPath);
@@ -23,7 +43,7 @@ internal sealed class TempDirectory : IDisposable
         do
         {
             // Make sure path doesn't already exist
-            this.DirectoryPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            this.DirectoryPath = Path.Combine(Path.GetTempPath(), nameof(FileEncrypter), Guid.NewGuid().ToString());
         }
         while (Directory.Exists(this.DirectoryPath));
 

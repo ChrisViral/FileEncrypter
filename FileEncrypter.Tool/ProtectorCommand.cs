@@ -34,7 +34,7 @@ public sealed class ProtectorCommand(ILogger<Protector> logger) : ICliRunAsyncWi
                Arity = CliArgumentArity.ZeroOrOne, Required = false, Alias = "-e",
                ValidationPattern = @"\..+", ValidationRules = CliValidationRules.LegalPath,
                ValidationMessage = "Extension must be a path-legal string starting with a period")]
-    public string Extension { get; set; } = ".enc";
+    public string Extension { get; set; } = ProtectionOptions.DEFAULT_EXTENSION;
 
     /// <summary>
     /// Type of protections to allow applying
@@ -48,7 +48,7 @@ public sealed class ProtectorCommand(ILogger<Protector> logger) : ICliRunAsyncWi
     /// </summary>
     [CliOption(Description = "Search pattern when protecting folders (supports wildcards)",
                Arity = CliArgumentArity.ZeroOrOne, Alias = "-sp")]
-    public string SearchPattern { get; set; } = "*";
+    public string SearchPattern { get; set; } = ProtectionOptions.DEFAULT_PATTERN;
 
     /// <summary>
     /// Whether to include subdirectories when protecting folders"

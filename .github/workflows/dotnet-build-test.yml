@@ -1,6 +1,6 @@
 # .github/workflows/dotnet-build-test.yml
 
-name: Build and Test (.NET 10.0)
+name: Build and Test
 
 on:
   push:

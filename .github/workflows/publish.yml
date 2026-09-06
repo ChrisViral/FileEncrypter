@@ -6,6 +6,7 @@ on:
   push:
     tags:
       - 'v*.*.*'
+
   workflow_dispatch:
     inputs:
       tag:
@@ -13,9 +14,15 @@ on:
         required: true
         type: string
 
+      dry_run:
+        description: Skip publishing the packages
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   publish:
+    name: Package and publish build
     runs-on: ubuntu-latest
 
     permissions:
@@ -45,42 +52,25 @@ jobs:
           }
 
       - name: Extract version from tag
-        id: get_version
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             TAG="${{ inputs.tag }}"
           else
             TAG="${GITHUB_REF#refs/tags/}"
           fi
-          echo "VERSION=${TAG#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Update .csproj with version
-        run: |
-          libcsproj=$(find . -name "FileEncrypter.csproj" | head -n 1)
-          toolcsproj=$(find . -name "FileEncrypter.Tool.csproj" | head -n 1)
-          version="${{ steps.get_version.outputs.VERSION }}"
-          echo "Setting version to $version in $libcsproj and $toolcsproj "
-
-          # Remove old version tags
-          sed -i '/<Version>.*<\/Version>/d' "$libcsproj"
-          sed -i '/<Version>.*<\/Version>/d' "$toolcsproj"
-          sed -i '/<InformationalVersion>.*<\/InformationalVersion>/d' "$libcsproj"
-          sed -i '/<InformationalVersion>.*<\/InformationalVersion>/d' "$toolcsproj"
-
-          # Inject new version tags before </PropertyGroup>
-          sed -i "s|</PropertyGroup>|  <Version>${version}</Version>\n  <InformationalVersion>${version}</InformationalVersion>\n</PropertyGroup>|" "$libcsproj"
-          sed -i "s|</PropertyGroup>|  <Version>${version}</Version>\n  <InformationalVersion>${version}</InformationalVersion>\n</PropertyGroup>|" "$toolcsproj"
+          echo "VERSION=${TAG#v}" >> $GITHUB_ENV
 
       - name: Restore dependencies
         run: dotnet restore ./FileEncrypter.Tool/FileEncrypter.Tool.csproj
 
-      - name: Build
-        run: dotnet build ./FileEncrypter.Tool/FileEncrypter.Tool.csproj --configuration Release --no-restore
-
       - name: Pack
-        run: dotnet pack ./FileEncrypter.Tool/FileEncrypter.Tool.csproj --configuration Release --no-build --output ./nupkgs
+        run: dotnet pack ./FileEncrypter.Tool/FileEncrypter.Tool.csproj \
+          --configuration Release \
+          /p:PackageVersion=${{ env.VERSION }} \
+          --output ./nupkgs
 
       - name: Push to GitHub Packages
+        if: ${{ inputs.dry_run != true }}
         run: |
           dotnet nuget push ./nupkgs/FileEncrypter.Tool*.nupkg \
             --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
@@ -93,6 +83,7 @@ jobs:
           user: ${{ secrets.NUGET_USER }}
 
       - name: Push to NuGet.org
+        if: ${{ inputs.dry_run != true }}
         run: |
           dotnet nuget push ./nupkgs/*.nupkg \
             --source https://api.nuget.org/v3/index.json \

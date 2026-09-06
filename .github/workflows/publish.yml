@@ -64,27 +64,14 @@ jobs:
         run: dotnet restore ./FileEncrypter.Tool/FileEncrypter.Tool.csproj
 
       - name: Build
-        run: |
-          dotnet build ./FileEncrypter.Tool/FileEncrypter.Tool.csproj
-            --no-restore
-            --configuration Release
-            /p:PackageVersion=${{ env.VERSION }}
+        run: dotnet build ./FileEncrypter.Tool/FileEncrypter.Tool.csproj --configuration Release --no-restore
 
       - name: Pack
-        run: |
-          dotnet pack ./FileEncrypter.Tool/FileEncrypter.Tool.csproj
-            --no-restore
-            --no-build
-            --configuration Release
-            /p:PackageVersion=${{ env.VERSION }}
-            --output ./nupkgs
+        run: dotnet pack ./FileEncrypter.Tool/FileEncrypter.Tool.csproj --configuration Release --no-restore --no-build /p:PackageVersion=${{ env.VERSION }} --output ./nupkgs
 
       - name: Push to GitHub Packages
         if: ${{ inputs.dry_run != true }}
-        run: |
-          dotnet nuget push ./nupkgs/FileEncrypter.Tool*.nupkg
-            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
-            --api-key ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet nuget push ./nupkgs/FileEncrypter.Tool*.nupkg --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" --api-key ${{ secrets.GITHUB_TOKEN }}
 
       - name: NuGet login
         uses: NuGet/login@v1.2.0
@@ -94,7 +81,4 @@ jobs:
 
       - name: Push to NuGet.org
         if: ${{ inputs.dry_run != true }}
-        run: |
-          dotnet nuget push ./nupkgs/*.nupkg
-            --source https://api.nuget.org/v3/index.json
-            --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push ./nupkgs/*.nupkg --source https://api.nuget.org/v3/index.json -api-key ${{ steps.login.outputs.NUGET_API_KEY }}
